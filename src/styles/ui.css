@@ -1,0 +1,459 @@
+/* src/styles/ui.css */
+
+/* --- 1. 全局变量与基础设置 --- */
+:root {
+  /* 赛博朋克 / 故障艺术配色 */
+  --neon-purple: #bc13fe;
+  --neon-green: #ccff00;
+  --neon-cyan: #00f3ff;
+  --dark-void: #050011;
+  --glass-bg: rgba(10, 0, 20, 0.65);
+  --glass-border: rgba(188, 19, 254, 0.3);
+  
+  /* 中文字体栈 */
+  --font-main: "Microsoft YaHei", "PingFang SC", "Heiti SC", sans-serif;
+  --font-hero: "Microsoft YaHei", "SimHei", "Arial Black", sans-serif;
+}
+
+.ui-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-main);
+  overflow: hidden;
+  color: #fff;
+}
+
+.ui-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  perspective: 1000px;
+}
+
+/* =========================================
+   2. 主菜单 (Menu)
+   ========================================= */
+
+.ui-menu-card {
+  pointer-events: auto;
+  position: relative;
+  width: min(800px, 90vw);
+  padding: 60px 40px;
+  
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5), 
+              0 0 100px rgba(188, 19, 254, 0.2);
+              
+  clip-path: polygon(
+    0 0, 100% 0, 
+    100% calc(100% - 30px), calc(100% - 30px) 100%, 
+    0 100%
+  );
+  
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+
+  animation: card-enter 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  transform-style: preserve-3d;
+}
+
+.ui-menu-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 4px; height: 100%;
+  background: var(--neon-green);
+  box-shadow: 0 0 15px var(--neon-green);
+}
+
+/* 巨大的故障标题 */
+.ui-hero-title {
+  position: relative;
+  font-family: var(--font-hero);
+  font-size: 80px;
+  font-weight: 900;
+  line-height: 1.1;
+  color: #fff;
+  letter-spacing: 4px;
+  margin-bottom: 10px;
+  text-shadow: 4px 4px 0px var(--neon-purple);
+  
+  animation: text-glitch 3s infinite alternate-reverse;
+}
+
+/* 副标题 */
+.ui-hero-subtitle {
+  font-size: 24px;
+  color: var(--neon-cyan);
+  font-weight: 700;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+/* 装饰图标行 */
+.ui-deco-row {
+  display: flex;
+  justify-content: center;
+  gap: 50px;
+  margin: 10px 0;
+  opacity: 0.9;
+}
+.ui-icon-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #aaa;
+  font-size: 14px;
+  font-weight: 600;
+  animation: float-y 3s ease-in-out infinite;
+}
+.ui-icon-box svg {
+  width: 32px;
+  height: 32px;
+  fill: var(--neon-green);
+  filter: drop-shadow(0 0 5px var(--neon-green));
+}
+.ui-icon-box:nth-child(2) { animation-delay: 0.2s; }
+.ui-icon-box:nth-child(3) { animation-delay: 0.4s; }
+
+/* 菜单主按钮 */
+.ui-actions-hero {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+.ui-btn-hero {
+  pointer-events: auto;
+  position: relative;
+  background: transparent;
+  color: var(--neon-green);
+  font-family: var(--font-hero);
+  font-size: 28px;
+  font-weight: 900;
+  padding: 20px 80px;
+  border: 2px solid var(--neon-green);
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.3s;
+  letter-spacing: 4px;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+.ui-btn-hero::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: var(--neon-green);
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  z-index: -1;
+  transform: skewX(-20deg);
+}
+.ui-btn-hero:hover {
+  color: #000;
+  box-shadow: 0 0 30px var(--neon-green);
+}
+.ui-btn-hero:hover::before {
+  transform: translateX(100%) skewX(-20deg);
+}
+
+/* 底部提示栏 */
+.ui-hint-bar {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  font-size: 12px;
+  color: #888;
+  font-family: var(--font-main);
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* =========================================
+   3. 通用样式 (Showroom / Result / HUD)
+   ========================================= */
+
+.ui-card, .ui-result-card {
+  pointer-events: auto;
+  width: min(720px, calc(100vw - 32px));
+  padding: 32px;
+  border-radius: 4px;
+  background: rgba(5, 5, 10, 0.85);
+  border: 1px solid var(--neon-purple);
+  box-shadow: 0 0 30px rgba(188, 19, 254, 0.15);
+  backdrop-filter: blur(14px);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ui-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 10px var(--neon-purple);
+}
+.ui-subtitle {
+  font-size: 16px;
+  color: #94a3b8;
+}
+.ui-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+/* 按钮 */
+.ui-btn {
+  pointer-events: auto;
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 600;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.ui-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  border-color: #fff;
+}
+.ui-btn-primary {
+  background: var(--neon-purple);
+  border-color: var(--neon-purple);
+  color: #fff;
+}
+.ui-btn-primary:hover {
+  background: #d946ef;
+  box-shadow: 0 0 20px var(--neon-purple);
+}
+.ui-btn-ghost {
+  background: transparent;
+  color: #aaa;
+}
+.ui-btn-ghost:hover {
+  color: #fff;
+}
+
+/* =========================================
+   Showroom (展厅布局) - 整合底栏版
+   ========================================= */
+.ui-showroom { 
+  align-items: stretch; 
+  justify-content: stretch; 
+}
+
+/* 1. 左上角：改装提示卡片 */
+.ui-showroom-help {
+  position: absolute;
+  top: 30px;
+  left: 30px;
+  width: 260px;
+  pointer-events: auto;
+  padding: 16px;
+  
+  /* 稍微加深背景，避免文字看不清 */
+  background: rgba(5, 5, 10, 0.6);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  text-align: left;
+  z-index: 10;
+}
+.ui-section-title { font-weight: bold; margin-bottom: 8px; color: var(--neon-cyan); }
+.ui-text { font-size: 12px; line-height: 1.4; color: #ccc; margin-bottom: 12px; }
+
+/* 2. 底部控制台 (容器) */
+.ui-bottom-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 120px; /* 留足高度给大按钮和文字 */
+  
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* 左右分散 */
+  padding: 0 40px 20px 40px;    /* 左右边距 */
+
+  /* 底部渐变背景，提升对比度 */
+  background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 60%, transparent 100%);
+  
+  pointer-events: none; /* 让鼠标可以透过上方空白操作 */
+  z-index: 10;
+}
+
+/* 左侧区域 (返回) */
+.ui-bar-left {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start;
+  pointer-events: auto;
+}
+
+/* 右侧区域 (开始) */
+.ui-bar-right {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+
+/* 中间区域 (选车器) */
+.ui-car-selector {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 30px; /* 箭头和文字的间距 */
+  pointer-events: auto;
+}
+
+/* 车型文字显示 */
+.ui-car-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 220px;
+  text-shadow: 0 0 15px var(--neon-cyan);
+}
+.ui-car-display .ui-label {
+  font-size: 10px;
+  letter-spacing: 4px;
+  color: var(--neon-green);
+  opacity: 0.8;
+  margin-bottom: 5px;
+}
+.ui-car-display .ui-value {
+  font-size: 42px; /* 更大的车型名 */
+  font-weight: 900;
+  font-family: var(--font-hero);
+  color: #fff;
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+
+/* 圆形导航箭头 */
+.ui-nav-arrow {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--neon-cyan);
+  font-size: 20px;
+  width: 48px; 
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.ui-nav-arrow:hover {
+  background: var(--neon-cyan);
+  color: #000;
+  box-shadow: 0 0 25px var(--neon-cyan);
+  transform: scale(1.15);
+  border-color: var(--neon-cyan);
+}
+.ui-nav-arrow:active {
+  transform: scale(0.95);
+}
+
+/* 开始比赛大按钮 */
+.ui-btn-large {
+  padding: 14px 40px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  clip-path: polygon(15px 0, 100% 0, 100% 100%, 0 100%, 0 15px); /* 切角风格 */
+  box-shadow: 0 0 20px rgba(188, 19, 254, 0.4);
+}
+.ui-btn-large:hover {
+  box-shadow: 0 0 40px rgba(188, 19, 254, 0.8);
+  transform: translateY(-3px) scale(1.02);
+}
+
+/* 通用标签/数值 (HUD / Result 使用) */
+.ui-label { font-size: 12px; color: #94a3b8; }
+.ui-value { font-size: 18px; font-weight: bold; color: #fff; }
+
+
+/* =========================================
+   HUD (抬头显示)
+   ========================================= */
+.ui-hud { align-items: flex-end; justify-content: center; padding-bottom: 30px; }
+.ui-hud-bar {
+  pointer-events: auto;
+  width: min(920px, calc(100vw - 48px));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 30px;
+  border-radius: 4px;
+  background: rgba(10, 12, 22, 0.85);
+  border: 1px solid var(--neon-cyan);
+  box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
+  backdrop-filter: blur(12px);
+}
+.ui-hud-item { text-align: center; }
+.ui-hud-label { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
+.ui-hud-value { font-size: 24px; font-weight: 900; font-family: monospace; color: var(--neon-cyan); }
+.ui-hud-actions { display: flex; gap: 10px; }
+.ui-countdown {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 120px; font-weight: 900;
+  color: var(--neon-green);
+  text-shadow: 0 0 50px var(--neon-green);
+  pointer-events: none;
+  font-style: italic;
+}
+
+/* =========================================
+   Result (结算页)
+   ========================================= */
+.ui-result-grid { display: flex; justify-content: center; gap: 40px; margin: 20px 0; }
+.ui-result-item .ui-value { font-size: 32px; color: var(--neon-cyan); }
+
+/* =========================================
+   Keyframes
+   ========================================= */
+@keyframes card-enter {
+  0% { opacity: 0; transform: translateY(100px) rotateX(20deg) scale(0.9); }
+  100% { opacity: 1; transform: translateY(0) rotateX(0) scale(1); }
+}
+@keyframes text-glitch {
+  0% { text-shadow: 4px 4px 0 var(--neon-purple); transform: skew(0deg); }
+  20% { text-shadow: -4px -4px 0 var(--neon-green); transform: skew(-2deg); }
+  40% { text-shadow: 2px -2px 0 var(--neon-cyan); transform: skew(1deg); }
+  60% { text-shadow: 0px 0px 0 transparent; transform: skew(0deg); }
+  80% { text-shadow: 3px 3px 0 var(--neon-purple); }
+  100% { text-shadow: -3px 0px 0 var(--neon-green); }
+}
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
