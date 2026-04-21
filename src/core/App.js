@@ -39,20 +39,29 @@ export class App {
     this._running = false;
     this._raf = 0;
     this._inputSurfaceFocused = false;
+    this._focusDebug = {
+      pointerDownCount: 0,
+      surfaceFocusCount: 0,
+      surfaceBlurCount: 0,
+      recentEvents: [],
+    };
 
     this.composer = null;
     this.bokehPass = null;
 
     this._onResize = () => this._handleResize();
     this._onSurfacePointerDown = (event) => {
+      this._recordFocusEvent('pointerdown');
       event.preventDefault();
       this.focusInputSurface();
     };
     this._onSurfaceFocus = () => {
       this._inputSurfaceFocused = true;
+      this._recordFocusEvent('focus');
     };
     this._onSurfaceBlur = () => {
       this._inputSurfaceFocused = false;
+      this._recordFocusEvent('blur');
     };
 
     window.addEventListener('resize', this._onResize);
@@ -88,6 +97,16 @@ export class App {
 
   isInputSurfaceFocused() {
     return this._inputSurfaceFocused;
+  }
+
+  getFocusDebugSnapshot() {
+    return {
+      isInputSurfaceFocused: this._inputSurfaceFocused,
+      pointerDownCount: this._focusDebug.pointerDownCount,
+      surfaceFocusCount: this._focusDebug.surfaceFocusCount,
+      surfaceBlurCount: this._focusDebug.surfaceBlurCount,
+      recentEvents: [...this._focusDebug.recentEvents],
+    };
   }
 
   _initPostProcessing() {
@@ -172,6 +191,20 @@ export class App {
 
     if (this.composer) {
       this.composer.setSize(width, height);
+    }
+  }
+
+  _recordFocusEvent(type) {
+    if (type === 'pointerdown') this._focusDebug.pointerDownCount += 1;
+    if (type === 'focus') this._focusDebug.surfaceFocusCount += 1;
+    if (type === 'blur') this._focusDebug.surfaceBlurCount += 1;
+
+    this._focusDebug.recentEvents.push({
+      type,
+      at: performance.now(),
+    });
+    if (this._focusDebug.recentEvents.length > 10) {
+      this._focusDebug.recentEvents.shift();
     }
   }
 }

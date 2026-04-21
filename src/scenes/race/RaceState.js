@@ -41,6 +41,9 @@ export function createRaceState(ctx) {
   let camRig = null;
   let scoreSys = null;
   let boundsSys = null;
+  let roadMeshCount = 0;
+  let initialResetSnapshot = null;
+  let latestDebugSnapshot = null;
 
   const prevKeys = { esc: false, r: false, c: false };
 
@@ -207,11 +210,23 @@ export function createRaceState(ctx) {
     return true;
   }
 
+  function countRoadMeshes(root) {
+    if (!root?.traverse) return 0;
+    let count = 0;
+    root.traverse((node) => {
+      if (node?.isMesh && typeof node.name === 'string' && node.name.startsWith('RoadChunk_')) {
+        count += 1;
+      }
+    });
+    return count;
+  }
+
   return {
     name: STATES.RACE,
 
     async enter() {
       ui?.setLayer?.('hud');
+      input.startGameplaySession();
 
       const hasSetup = commitSetupFromRuntime();
       if (!hasSetup || !cubeCamera) {
@@ -238,7 +253,13 @@ export function createRaceState(ctx) {
 
       if (trackData?.spawn) {
         carCtrl.reset(trackData.spawn.position, trackData.spawn.yaw);
+        initialResetSnapshot = {
+          posY: Number(carCtrl.state.pos.y.toFixed(2)),
+          onGround: carCtrl.state.onGround,
+          speed: Number(carCtrl.state.speed.toFixed(2)),
+        };
       }
+      roadMeshCount = countRoadMeshes(trackData?.root);
 
       // ----------------------------------
       // Init AI Controller
@@ -294,6 +315,19 @@ export function createRaceState(ctx) {
       prevKeys.c = false;
       
       frameCount = 0;
+      latestDebugSnapshot = {
+        phase: 'race-enter',
+        frame: 0,
+        timeSec: '0.0',
+        axis: { throttle: 0, steer: 0 },
+        speedKmh: 0,
+        onGround: carCtrl?.state?.onGround ?? false,
+        posY: Number(carCtrl?.state?.pos?.y?.toFixed?.(2) ?? 0),
+        handbrake: false,
+        roadMeshCount,
+        initialReset: initialResetSnapshot,
+      };
+      ctx.setRaceDebugMetricsProvider?.(() => latestDebugSnapshot);
 
       app.setActive({
         scene,
@@ -364,12 +398,30 @@ export function createRaceState(ctx) {
           const speedKmh = Math.max(0, Math.round(Math.abs(carCtrl.state.speed) * 3.6));
           const { score, distance } = scoreSys.getDisplayData();
           ui?.setHud?.({ speedKmh, mileage: distance, score, timeSec: t.toFixed(1) });
+          latestDebugSnapshot = {
+            phase: 'race',
+            frame: frameCount,
+            timeSec: t.toFixed(1),
+            axis,
+            speedKmh,
+            onGround: carCtrl.state.onGround,
+            posY: Number(carCtrl.state.pos.y.toFixed(2)),
+            handbrake,
+            roadMeshCount,
+            initialReset: initialResetSnapshot,
+          };
         },
       });
       ctx.requestInputFocus?.();
     },
 
     async exit() {
+      input.endGameplaySession();
+      ctx.setRaceDebugMetricsProvider?.(() => ({
+        phase: 'race-exit',
+        roadMeshCount,
+        initialReset: initialResetSnapshot,
+      }));
       app.setActive({ scene: null, camera: null, update: null });
       if(cubeRenderTarget) cubeRenderTarget.dispose();
       try {

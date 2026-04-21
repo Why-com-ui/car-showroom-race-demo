@@ -10,6 +10,7 @@ import { StateMachine } from './core/StateMachine.js';
 import { DEFAULT_CAR_MODELS, DEFAULT_SETTINGS, STATES } from './core/constants.js';
 
 import { UiRoot } from './ui/UiRoot.js';
+import { InputDebugOverlay } from './ui/InputDebugOverlay.js';
 
 import { createMenuState } from './scenes/menu/MenuState.js';
 import { createShowroomState } from './scenes/showroom/ShowroomState.js';
@@ -35,6 +36,8 @@ function reportRuntimeError(error) {
 
 (async function bootstrap() {
   const mount = ensureAppMount();
+  const searchParams = new URLSearchParams(window.location.search);
+  const debugInputEnabled = searchParams.get('debugInput') === '1';
 
   const app = new App({ mount, maxPixelRatio: DEFAULT_SETTINGS.maxPixelRatio });
   const store = new Store({
@@ -46,7 +49,14 @@ function reportRuntimeError(error) {
   const assets = new Assets();
   const input = new Input();
   input.bindSurface(app.renderer.domElement);
+  input.setDebugEnabled(debugInputEnabled);
   input.mount();
+
+  const inputDebugOverlay = debugInputEnabled
+    ? new InputDebugOverlay({ mount: document.body, input, app })
+    : null;
+  let debugOverlayRaf = 0;
+  inputDebugOverlay?.mount();
 
   const sm = new StateMachine();
 
@@ -76,6 +86,25 @@ function reportRuntimeError(error) {
   let showroomState = null;
   let raceIntroState = null;
   let resultState = null;
+  let raceMetricsProvider = null;
+
+  const setRaceDebugMetricsProvider = (provider) => {
+    raceMetricsProvider = typeof provider === 'function' ? provider : null;
+    inputDebugOverlay?.setMetricsProvider(raceMetricsProvider);
+  };
+
+  if (debugInputEnabled) {
+    Object.defineProperty(window, '__raceDebug', {
+      configurable: true,
+      get: () => inputDebugOverlay?.getSnapshot() ?? null,
+    });
+
+    const renderDebugOverlay = () => {
+      inputDebugOverlay?.render();
+      debugOverlayRaf = requestAnimationFrame(renderDebugOverlay);
+    };
+    renderDebugOverlay();
+  }
 
   const ui = new UiRoot({
     mount: document.body,
@@ -139,6 +168,10 @@ function reportRuntimeError(error) {
     runtime,
     trackModule: TrackModule,
     requestInputFocus: queueInputFocus,
+    setRaceDebugMetricsProvider,
+    debugFlags: {
+      input: debugInputEnabled,
+    },
     createRaceState: (c) => createRaceState(c),
     onRaceFinish: (result) => {
       store.setState({ lastRace: result });
@@ -159,6 +192,9 @@ function reportRuntimeError(error) {
     async enter() {
       ui.setLayer('result');
       app.setActive({ scene: null, camera: null, update: null });
+      setRaceDebugMetricsProvider(() => ({
+        phase: 'result',
+      }));
       queueInputFocus();
     },
     async exit() {
@@ -174,7 +210,10 @@ function reportRuntimeError(error) {
   if (import.meta.hot) {
     import.meta.hot.dispose(() => {
       try {
+        cancelAnimationFrame(debugOverlayRaf);
         input.unmount();
+        inputDebugOverlay?.destroy();
+        setRaceDebugMetricsProvider(null);
         ui.destroy();
         app.destroy();
       } catch (error) {

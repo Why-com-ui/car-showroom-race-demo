@@ -21,35 +21,118 @@ const DEFAULT_RESERVED_KEYS = new Set([
   'Escape',
 ]);
 
+const CONTINUOUS_GAMEPLAY_KEYS = new Set([
+  'KeyW',
+  'KeyA',
+  'KeyS',
+  'KeyD',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Space',
+]);
+
+const KEY_TO_CODE = {
+  w: 'KeyW',
+  W: 'KeyW',
+  a: 'KeyA',
+  A: 'KeyA',
+  s: 'KeyS',
+  S: 'KeyS',
+  d: 'KeyD',
+  D: 'KeyD',
+  c: 'KeyC',
+  C: 'KeyC',
+  r: 'KeyR',
+  R: 'KeyR',
+  ArrowUp: 'ArrowUp',
+  ArrowDown: 'ArrowDown',
+  ArrowLeft: 'ArrowLeft',
+  ArrowRight: 'ArrowRight',
+  Escape: 'Escape',
+  Esc: 'Escape',
+  ' ': 'Space',
+  Spacebar: 'Space',
+};
+
 export class Input {
   constructor({ reservedKeys = DEFAULT_RESERVED_KEYS } = {}) {
     this._keys = new Set();
+    this._gameplayHeldKeys = new Set();
     this._syntheticKeys = new Set();
     this._reservedKeys = new Set(reservedKeys);
     this._handlersBound = false;
     this._inputSurface = null;
+    this._gameplaySessionActive = false;
+    this._debugEnabled = false;
+    this._eventLog = [];
+    this._clearCounts = {
+      windowBlur: 0,
+      hidden: 0,
+      sessionExit: 0,
+      manual: 0,
+    };
+    this._lastClearReason = 'initial';
 
     this._onKeyDown = (event) => {
-      if (this._shouldIgnoreTarget(event.target)) return;
-      if (this._reservedKeys.has(event.code)) event.preventDefault();
-      this._keys.add(event.code);
+      const code = this._normalizeCode(event);
+      if (!code) return;
+
+      if (this._shouldIgnoreTarget(event.target)) {
+        this._recordEvent('keydown-ignored', code, event);
+        return;
+      }
+
+      if (this._reservedKeys.has(code)) event.preventDefault();
+
+      this._keys.add(code);
+      if (this._gameplaySessionActive && CONTINUOUS_GAMEPLAY_KEYS.has(code)) {
+        this._gameplayHeldKeys.add(code);
+      }
+
+      this._recordEvent('keydown', code, event);
     };
 
     this._onKeyUp = (event) => {
-      if (this._shouldIgnoreTarget(event.target)) return;
-      if (this._reservedKeys.has(event.code)) event.preventDefault();
-      this._keys.delete(event.code);
-      this._syntheticKeys.delete(event.code);
+      const code = this._normalizeCode(event);
+      if (!code) return;
+
+      if (this._shouldIgnoreTarget(event.target)) {
+        this._recordEvent('keyup-ignored', code, event);
+        return;
+      }
+
+      if (this._reservedKeys.has(code)) event.preventDefault();
+
+      this._keys.delete(code);
+      this._gameplayHeldKeys.delete(code);
+      this._syntheticKeys.delete(code);
+      this._recordEvent('keyup', code, event);
     };
 
-    this._onBlur = () => this.clear();
+    this._onBlur = () => this.clear('windowBlur');
     this._onVisibilityChange = () => {
-      if (document.hidden) this.clear();
+      if (document.hidden) this.clear('hidden');
     };
   }
 
   bindSurface(surface) {
     this._inputSurface = surface || null;
+  }
+
+  setDebugEnabled(enabled) {
+    this._debugEnabled = !!enabled;
+  }
+
+  startGameplaySession() {
+    this._gameplaySessionActive = true;
+    this._gameplayHeldKeys.clear();
+  }
+
+  endGameplaySession() {
+    this._gameplaySessionActive = false;
+    this.clear('sessionExit');
   }
 
   mount() {
@@ -69,18 +152,24 @@ export class Input {
     document.removeEventListener('keyup', this._onKeyUp, true);
     window.removeEventListener('blur', this._onBlur);
     document.removeEventListener('visibilitychange', this._onVisibilityChange);
-    this.clear();
+    this.clear('manual');
     this._handlersBound = false;
   }
 
-  clear() {
+  clear(reason = 'manual') {
     this._keys.clear();
+    this._gameplayHeldKeys.clear();
     this._syntheticKeys.clear();
+    this._lastClearReason = reason;
+    if (this._clearCounts[reason] !== undefined) {
+      this._clearCounts[reason] += 1;
+    }
   }
 
   pressOnce(code) {
     if (!code) return;
     this._syntheticKeys.add(code);
+    this._recordSynthetic(code);
   }
 
   down(code) {
@@ -89,10 +178,26 @@ export class Input {
       return true;
     }
 
+    if (this._gameplaySessionActive && CONTINUOUS_GAMEPLAY_KEYS.has(code)) {
+      return this._gameplayHeldKeys.has(code);
+    }
+
     return this._keys.has(code);
   }
 
   axis2D() {
+    if (this._gameplaySessionActive) {
+      const up = this._gameplayHeldKeys.has('KeyW') || this._gameplayHeldKeys.has('ArrowUp');
+      const down = this._gameplayHeldKeys.has('KeyS') || this._gameplayHeldKeys.has('ArrowDown');
+      const left = this._gameplayHeldKeys.has('KeyA') || this._gameplayHeldKeys.has('ArrowLeft');
+      const right = this._gameplayHeldKeys.has('KeyD') || this._gameplayHeldKeys.has('ArrowRight');
+
+      return {
+        throttle: (up ? 1 : 0) + (down ? -1 : 0),
+        steer: (right ? 1 : 0) + (left ? -1 : 0),
+      };
+    }
+
     const up = this.down('KeyW') || this.down('ArrowUp');
     const down = this.down('KeyS') || this.down('ArrowDown');
     const left = this.down('KeyA') || this.down('ArrowLeft');
@@ -102,6 +207,25 @@ export class Input {
       throttle: (up ? 1 : 0) + (down ? -1 : 0),
       steer: (right ? 1 : 0) + (left ? -1 : 0),
     };
+  }
+
+  getDebugSnapshot() {
+    return {
+      gameplaySessionActive: this._gameplaySessionActive,
+      heldKeys: [...this._gameplayHeldKeys],
+      rawKeys: [...this._keys],
+      syntheticKeys: [...this._syntheticKeys],
+      axis: this.axis2D(),
+      clearCounts: { ...this._clearCounts },
+      lastClearReason: this._lastClearReason,
+      eventLog: [...this._eventLog],
+    };
+  }
+
+  _normalizeCode(event) {
+    if (event?.code && event.code !== 'Unidentified') return event.code;
+    if (event?.key && KEY_TO_CODE[event.key]) return KEY_TO_CODE[event.key];
+    return null;
   }
 
   _shouldIgnoreTarget(target) {
@@ -121,4 +245,52 @@ export class Input {
 
     return false;
   }
+
+  _recordEvent(type, code, event) {
+    if (!this._debugEnabled) return;
+
+    this._eventLog.push({
+      type,
+      code,
+      key: event.key,
+      repeat: !!event.repeat,
+      target: describeTarget(event.target),
+      at: performance.now(),
+    });
+
+    if (this._eventLog.length > 10) {
+      this._eventLog.shift();
+    }
+  }
+
+  _recordSynthetic(code) {
+    if (!this._debugEnabled) return;
+
+    this._eventLog.push({
+      type: 'synthetic',
+      code,
+      key: code,
+      repeat: false,
+      target: 'ui-command',
+      at: performance.now(),
+    });
+
+    if (this._eventLog.length > 10) {
+      this._eventLog.shift();
+    }
+  }
+}
+
+function describeTarget(target) {
+  if (!(target instanceof Element)) return 'unknown';
+
+  const parts = [target.tagName.toLowerCase()];
+  if (target.id) parts.push(`#${target.id}`);
+  if (target.classList.length) {
+    parts.push(`.${[...target.classList].slice(0, 2).join('.')}`);
+  }
+  if (target.getAttribute('data-action')) {
+    parts.push(`[data-action="${target.getAttribute('data-action')}"]`);
+  }
+  return parts.join('');
 }
