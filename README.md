@@ -22,9 +22,14 @@
 
 ## 项目概览
 
-`3d-project` 不是一个单纯的模型展示页，而是一个完整的小型 3D 前端作品。它把“从进入菜单，到浏览展厅，再到进入比赛”的整条体验链做了起来，更适合放在 GitHub 仓库首页、作品集或在线演示页面中展示。
+`3d-project` 是一个基于 Vite + Three.js 开发的 3D 汽车展厅与竞速 Demo。项目包含主菜单、车辆展厅、参数调节、比赛场景、HUD 和结果页，整体体验比较完整，适合用来做前端 3D 作品展示，也支持部署到 GitHub Pages 在线查看。
 
-当前项目围绕“可体验、可展示、可在线访问”来设计，适合作为一个完整的前端 3D 小作品进行展示。
+当前项目已经完成了 GitHub Pages 兼容处理，包括：
+
+- 生产环境 `base` 路径配置
+- `public/` 静态资源路径统一处理
+- GitHub Actions 自动构建与部署工作流
+- 面向仓库展示的 README 与项目说明
 
 ## 在线演示
 
@@ -33,7 +38,7 @@
 **在线地址：**  
 https://why-com-ui.github.io/3d-project/
 
-这是项目的在线演示入口，可直接用于浏览完整体验流程。
+
 
 ## 项目亮点
 
@@ -100,43 +105,5 @@ npm run preview
 - `R`：重置车辆
 - `Esc`：退出比赛并进入结果页
 
-## 项目结构
 
-```text
-src/
-├─ core/        # 应用核心、输入系统、状态机、资源管理
-├─ scenes/      # 菜单、展厅、比赛场景与相关系统
-├─ ui/          # 菜单、HUD、结果页等界面层
-└─ styles/      # 全局样式与 UI 样式
 
-public/
-├─ car1.glb
-├─ car2.glb
-└─ vite.svg
-```
-
-## GitHub Pages 部署
-
-仓库已经包含 GitHub Actions 工作流文件：  
-[.github/workflows/deploy.yml](./.github/workflows/deploy.yml)
-
-部署流程：
-
-1. 将项目推送到 GitHub 仓库 `3d-project`
-2. 打开仓库 `Settings > Pages`
-3. 将 `Source` 设置为 `GitHub Actions`
-4. 推送到 `main` 分支
-5. 等待 Actions 自动构建并发布
-
-部署完成后，项目会自动显示在：
-
-```text
-https://why-com-ui.github.io/3d-project/
-```
-
-## 后续可扩展方向
-
-- 增加更多车型、材质和轮毂配置
-- 为比赛加入排名、计圈或计时挑战
-- 增加音效、加载动画和过场表现
-- 为仓库补充截图或 GIF，让 GitHub 首页更完整
