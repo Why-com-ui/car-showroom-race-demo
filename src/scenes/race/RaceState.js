@@ -366,6 +366,7 @@ export function createRaceState(ctx) {
           ui?.setHud?.({ speedKmh, mileage: distance, score, timeSec: t.toFixed(1) });
         },
       });
+      ctx.requestInputFocus?.();
     },
 
     async exit() {

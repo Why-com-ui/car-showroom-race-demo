@@ -235,6 +235,7 @@ export function createRaceIntroState(ctx) {
           }
         },
       });
+      ctx.requestInputFocus?.();
     },
 
     async exit() {

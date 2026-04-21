@@ -136,6 +136,7 @@ export function createShowroomState(ctx) {
         camera: showroom.camera,
         update: (dt, t) => showroom.update(dt, t),
       });
+      ctx.requestInputFocus?.();
 
       // ★ 进场：播放灯光秀 (延迟一点点，确保渲染循环已启动)
       setTimeout(() => {

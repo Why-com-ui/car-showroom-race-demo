@@ -1,7 +1,6 @@
 // src/core/App.js
 import * as THREE from 'three';
 
-// --- 引入后处理模块 ---
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -14,23 +13,23 @@ export class App {
     this.mount = mount;
     this.maxPixelRatio = maxPixelRatio;
 
-    // 1. 渲染器设置
     this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.maxPixelRatio));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-
-    // 开启阴影
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-    // 色调映射 (Tone Mapping)
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0; 
-
-    // 色彩空间修正
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    this.mount.appendChild(this.renderer.domElement);
+    this.inputSurface = this.renderer.domElement;
+    this.inputSurface.tabIndex = 0;
+    this.inputSurface.dataset.inputSurface = 'game';
+    this.inputSurface.setAttribute('role', 'application');
+    this.inputSurface.setAttribute('aria-label', '3D racing viewport. Use WASD or arrow keys to drive.');
+    this.inputSurface.style.touchAction = 'none';
+
+    this.mount.appendChild(this.inputSurface);
 
     this.clock = new THREE.Clock();
     this.scene = null;
@@ -38,13 +37,24 @@ export class App {
     this.updateFn = null;
     this._running = false;
     this._raf = 0;
+    this._inputSurfaceFocused = false;
 
-    // --- 后处理合成器 ---
     this.composer = null;
-    this.bokehPass = null; // 即使不用也可以保留这个属性占位，或者删掉也行
+    this.bokehPass = null;
 
     this._onResize = () => this._handleResize();
+    this._onSurfacePointerDown = () => this.focusInputSurface();
+    this._onSurfaceFocus = () => {
+      this._inputSurfaceFocused = true;
+    };
+    this._onSurfaceBlur = () => {
+      this._inputSurfaceFocused = false;
+    };
+
     window.addEventListener('resize', this._onResize);
+    this.inputSurface.addEventListener('pointerdown', this._onSurfacePointerDown);
+    this.inputSurface.addEventListener('focus', this._onSurfaceFocus);
+    this.inputSurface.addEventListener('blur', this._onSurfaceBlur);
   }
 
   setActive({ scene, camera, update }) {
@@ -52,11 +62,9 @@ export class App {
     this.camera = camera || null;
     this.updateFn = typeof update === 'function' ? update : null;
 
-    // 当切换场景时 (例如进入比赛)，如果有相机和场景，初始化后处理管线
     if (this.scene && this.camera) {
       this._initPostProcessing();
     } else {
-      // 如果没有场景 (比如销毁阶段)，清空合成器
       this.composer = null;
       this.bokehPass = null;
     }
@@ -64,30 +72,38 @@ export class App {
     this._handleResize();
   }
 
+  focusInputSurface() {
+    if (!this.inputSurface?.isConnected) return;
+    this.inputSurface.focus({ preventScroll: true });
+  }
+
+  blurInputSurface() {
+    if (!this.inputSurface?.isConnected) return;
+    this.inputSurface.blur();
+  }
+
+  isInputSurfaceFocused() {
+    return this._inputSurfaceFocused;
+  }
+
   _initPostProcessing() {
-    // 安全检查
     if (!this.renderer || !this.scene || !this.camera) return;
 
-    // 1. 创建合成器
     this.composer = new EffectComposer(this.renderer);
-    
-    // 2. 基础渲染通道 (Render Scene) - 先把场景画出来
+
     const renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(renderPass);
 
-    // 3. ✨ Unreal Bloom (辉光特效)
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.01,  // 强度
-      0.01,  // 半径
-      1.5    // 阈值
+      0.01,
+      0.01,
+      1.5
     );
     this.composer.addPass(bloomPass);
 
+    this.bokehPass = null;
 
-    this.bokehPass = null; // 确保置空
-
-    // 5. 色彩输出修正 (OutputPass)
     const outputPass = new OutputPass();
     this.composer.addPass(outputPass);
   }
@@ -108,13 +124,16 @@ export class App {
   destroy() {
     this.stop();
     window.removeEventListener('resize', this._onResize);
+    this.inputSurface.removeEventListener('pointerdown', this._onSurfacePointerDown);
+    this.inputSurface.removeEventListener('focus', this._onSurfaceFocus);
+    this.inputSurface.removeEventListener('blur', this._onSurfaceBlur);
     this.renderer.dispose?.();
-    
+
     if (this.composer) {
-        this.composer.renderTarget1.dispose();
-        this.composer.renderTarget2.dispose();
-        this.composer = null;
-        this.bokehPass = null;
+      this.composer.renderTarget1.dispose();
+      this.composer.renderTarget2.dispose();
+      this.composer = null;
+      this.bokehPass = null;
     }
 
     if (this.renderer.domElement?.parentNode) {
@@ -126,16 +145,12 @@ export class App {
     this._raf = requestAnimationFrame(() => this._tick());
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const t = this.clock.elapsedTime;
-    
+
     if (this.updateFn) this.updateFn(dt, t);
 
-    // 渲染逻辑分支
     if (this.scene && this.camera) {
-      if (this.composer) {
-        this.composer.render();
-      } else {
-        this.renderer.render(this.scene, this.camera);
-      }
+      if (this.composer) this.composer.render();
+      else this.renderer.render(this.scene, this.camera);
     }
   }
 

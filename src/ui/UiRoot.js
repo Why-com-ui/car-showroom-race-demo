@@ -4,24 +4,6 @@ import { ShowroomUI } from './ShowroomUI.js';
 import { HUD } from './HUD.js';
 import { ResultUI } from './ResultUI.js';
 
-/**
- * UiRoot：统一挂载 + 切换界面层
- *
- * 你在 main.js 里一般这样用：
- * const ui = new UiRoot({ mount: document.body, callbacks: {...} });
- * ui.mount();
- * ui.setLayer('menu');
- *
- * callbacks（按需提供）：
- * - onEnterShowroom()
- * - onBackToMenu()
- * - onPrevCar()
- * - onNextCar()
- * - onStartRace()
- * - onExitRace()
- * - onRestartRace()
- * - onBackToShowroom()
- */
 export class UiRoot {
   constructor({ mount = document.body, callbacks = {} } = {}) {
     this.mountEl = mount;
@@ -30,7 +12,6 @@ export class UiRoot {
     this.root = document.createElement('div');
     this.root.className = 'ui-root';
 
-    // Layers
     this.menu = new MenuUI({
       onEnterShowroom: () => this.callbacks.onEnterShowroom?.(),
     });
@@ -60,14 +41,23 @@ export class UiRoot {
     this.root.appendChild(this.result.root);
 
     this._currentLayer = null;
+    this._onRootClick = (event) => {
+      const button = event.target.closest('button');
+      if (!button || !this.root.contains(button)) return;
+
+      window.requestAnimationFrame(() => button.blur());
+      this.callbacks.onUiAction?.(button.getAttribute('data-action') || '', button);
+    };
   }
 
   mount() {
     if (!this.root.parentNode) this.mountEl.appendChild(this.root);
+    this.root.addEventListener('click', this._onRootClick);
     this.setLayer('menu');
   }
 
   destroy() {
+    this.root.removeEventListener('click', this._onRootClick);
     this.menu?.destroy?.();
     this.showroom?.destroy?.();
     this.hud?.destroy?.();
@@ -80,9 +70,6 @@ export class UiRoot {
     this.callbacks = { ...this.callbacks, ...callbacks };
   }
 
-  /**
-   * layerName: 'menu' | 'showroom' | 'raceIntro' | 'hud' | 'result'
-   */
   setLayer(layerName) {
     this._currentLayer = layerName;
 
@@ -91,7 +78,6 @@ export class UiRoot {
     this.hud.hide();
     this.result.hide();
 
-    // raceIntro 其实就是 HUD + 倒计时遮罩
     if (layerName === 'raceIntro') {
       this.hud.show();
       this.hud.setCountdown(3);
@@ -105,16 +91,11 @@ export class UiRoot {
     else this.menu.show();
   }
 
-  // ---- Delegates for scenes ----
   setCarName(name) {
     this.showroom.setCarName(name);
   }
 
   setCountdown(n) {
-    // 倒计时一般用于 raceIntro
-    if (this._currentLayer !== 'raceIntro' && this._currentLayer !== 'hud') {
-      // 允许在任何层调用但仅在 HUD 可见时显示
-    }
     this.hud.setCountdown(n);
   }
 
@@ -138,7 +119,6 @@ export class UiRoot {
     this.result.setResult(result);
   }
 
-  // 可选：展厅里同步配置（如果你后面要做表单）
   syncCarConfig(cfg) {
     this.showroom.syncCarConfig?.(cfg);
   }
