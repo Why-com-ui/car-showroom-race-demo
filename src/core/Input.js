@@ -55,8 +55,8 @@ export class Input {
   mount() {
     if (this._handlersBound) return;
 
-    window.addEventListener('keydown', this._onKeyDown, { passive: false });
-    window.addEventListener('keyup', this._onKeyUp, { passive: false });
+    document.addEventListener('keydown', this._onKeyDown, { capture: true, passive: false });
+    document.addEventListener('keyup', this._onKeyUp, { capture: true, passive: false });
     window.addEventListener('blur', this._onBlur);
     document.addEventListener('visibilitychange', this._onVisibilityChange);
     this._handlersBound = true;
@@ -65,8 +65,8 @@ export class Input {
   unmount() {
     if (!this._handlersBound) return;
 
-    window.removeEventListener('keydown', this._onKeyDown);
-    window.removeEventListener('keyup', this._onKeyUp);
+    document.removeEventListener('keydown', this._onKeyDown, true);
+    document.removeEventListener('keyup', this._onKeyUp, true);
     window.removeEventListener('blur', this._onBlur);
     document.removeEventListener('visibilitychange', this._onVisibilityChange);
     this.clear();

@@ -39,7 +39,7 @@ export class MenuUI {
 
         <div class="ui-hint-bar">
           <span>操作：WASD / 方向键 驾驶</span>
-          <span>版本: 2025.12.RC</span>
+          <span>版本: ⟁⌁◈</span>
         </div>
       </div>
     `;

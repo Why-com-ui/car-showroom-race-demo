@@ -24,6 +24,7 @@ export class App {
 
     this.inputSurface = this.renderer.domElement;
     this.inputSurface.tabIndex = 0;
+    this.inputSurface.autofocus = true;
     this.inputSurface.dataset.inputSurface = 'game';
     this.inputSurface.setAttribute('role', 'application');
     this.inputSurface.setAttribute('aria-label', '3D racing viewport. Use WASD or arrow keys to drive.');
@@ -43,7 +44,10 @@ export class App {
     this.bokehPass = null;
 
     this._onResize = () => this._handleResize();
-    this._onSurfacePointerDown = () => this.focusInputSurface();
+    this._onSurfacePointerDown = (event) => {
+      event.preventDefault();
+      this.focusInputSurface();
+    };
     this._onSurfaceFocus = () => {
       this._inputSurfaceFocused = true;
     };
@@ -52,7 +56,7 @@ export class App {
     };
 
     window.addEventListener('resize', this._onResize);
-    this.inputSurface.addEventListener('pointerdown', this._onSurfacePointerDown);
+    this.inputSurface.addEventListener('pointerdown', this._onSurfacePointerDown, { passive: false });
     this.inputSurface.addEventListener('focus', this._onSurfaceFocus);
     this.inputSurface.addEventListener('blur', this._onSurfaceBlur);
   }
