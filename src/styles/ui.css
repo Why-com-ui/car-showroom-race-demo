@@ -39,6 +39,60 @@
   perspective: 1000px;
 }
 
+.ui-focus-prompt {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at center, rgba(0, 243, 255, 0.08), transparent 42%),
+    rgba(2, 6, 16, 0.52);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  z-index: 1200;
+}
+
+.ui-focus-prompt.is-visible {
+  display: flex;
+  pointer-events: auto;
+}
+
+.ui-focus-prompt__card {
+  width: min(440px, calc(100vw - 48px));
+  padding: 24px 28px;
+  border: 1px solid rgba(0, 243, 255, 0.28);
+  background: rgba(4, 8, 18, 0.92);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 0 50px rgba(0, 243, 255, 0.12);
+  text-align: center;
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+}
+
+.ui-focus-prompt__eyebrow {
+  margin-bottom: 10px;
+  color: var(--neon-green);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+
+.ui-focus-prompt__title {
+  color: #fff;
+  font-family: var(--font-hero);
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-shadow: 0 0 16px rgba(0, 243, 255, 0.24);
+}
+
+.ui-focus-prompt__hint {
+  margin-top: 12px;
+  color: #96a8c5;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 /* =========================================
    2. 主菜单 (Menu)
    ========================================= */

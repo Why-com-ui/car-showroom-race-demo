@@ -19,6 +19,14 @@ import { createRaceState } from './scenes/race/RaceState.js';
 
 import * as TrackModule from './scenes/race/tracks/Track_NeonSpline.js';
 
+function shouldIgnoreGameplayFocusTarget(target) {
+  if (!(target instanceof Element)) return false;
+
+  return !!target.closest(
+    'input, textarea, select, [contenteditable="true"], [role="textbox"], .dg, .datgui-theme, [data-no-game-focus]'
+  );
+}
+
 function ensureAppMount() {
   let el = document.getElementById('app');
   if (!el) {
@@ -56,12 +64,33 @@ function reportRuntimeError(error) {
     ? new InputDebugOverlay({ mount: document.body, input, app })
     : null;
   let debugOverlayRaf = 0;
+  let focusPromptRaf = 0;
   inputDebugOverlay?.mount();
 
   const sm = new StateMachine();
+  let ui = null;
 
-  const queueInputFocus = () => {
-    window.requestAnimationFrame(() => app.focusInputSurface());
+  const isGameplayControlActive = () => input.isGameplaySessionActive?.() ?? false;
+
+  const syncFocusPrompt = () => {
+    ui?.setFocusPromptVisible?.(
+      isGameplayControlActive() && (!document.hasFocus() || !app.isInputSurfaceFocused())
+    );
+  };
+
+  const queueInputFocus = (attempts = 2) => {
+    let remaining = Math.max(1, Number(attempts) || 1);
+
+    const focusStep = () => {
+      app.focusInputSurface();
+      syncFocusPrompt();
+      remaining -= 1;
+      if (remaining > 0) {
+        window.requestAnimationFrame(focusStep);
+      }
+    };
+
+    window.requestAnimationFrame(focusStep);
   };
 
   const triggerCommand = (code) => {
@@ -106,11 +135,15 @@ function reportRuntimeError(error) {
     renderDebugOverlay();
   }
 
-  const ui = new UiRoot({
+  ui = new UiRoot({
     mount: document.body,
     callbacks: {
       onUiAction: () => {
         queueInputFocus();
+      },
+
+      onRecoverInput: () => {
+        queueInputFocus(3);
       },
 
       onEnterShowroom: () => {
@@ -157,6 +190,37 @@ function reportRuntimeError(error) {
     },
   });
   ui.mount();
+  syncFocusPrompt();
+
+  const handleWindowFocus = () => {
+    if (isGameplayControlActive()) {
+      queueInputFocus(3);
+    } else {
+      syncFocusPrompt();
+    }
+  };
+  const handleWindowBlur = () => {
+    window.setTimeout(syncFocusPrompt, 0);
+  };
+  const handleVisibilityChange = () => {
+    syncFocusPrompt();
+  };
+  const handleGameplayPointerDown = (event) => {
+    if (!isGameplayControlActive()) return;
+    if (shouldIgnoreGameplayFocusTarget(event.target)) return;
+    queueInputFocus();
+  };
+
+  window.addEventListener('focus', handleWindowFocus);
+  window.addEventListener('blur', handleWindowBlur);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  document.addEventListener('pointerdown', handleGameplayPointerDown, true);
+
+  const monitorFocusPrompt = () => {
+    syncFocusPrompt();
+    focusPromptRaf = requestAnimationFrame(monitorFocusPrompt);
+  };
+  monitorFocusPrompt();
 
   const ctx = {
     app,
@@ -210,7 +274,12 @@ function reportRuntimeError(error) {
   if (import.meta.hot) {
     import.meta.hot.dispose(() => {
       try {
+        cancelAnimationFrame(focusPromptRaf);
         cancelAnimationFrame(debugOverlayRaf);
+        document.removeEventListener('pointerdown', handleGameplayPointerDown, true);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleWindowFocus);
+        window.removeEventListener('blur', handleWindowBlur);
         input.unmount();
         inputDebugOverlay?.destroy();
         setRaceDebugMetricsProvider(null);

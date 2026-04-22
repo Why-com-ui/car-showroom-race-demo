@@ -135,6 +135,10 @@ export class Input {
     this.clear('sessionExit');
   }
 
+  isGameplaySessionActive() {
+    return this._gameplaySessionActive;
+  }
+
   mount() {
     if (this._handlersBound) return;
 

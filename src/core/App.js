@@ -96,12 +96,13 @@ export class App {
   }
 
   isInputSurfaceFocused() {
-    return this._inputSurfaceFocused;
+    return this._inputSurfaceFocused || document.activeElement === this.inputSurface;
   }
 
   getFocusDebugSnapshot() {
+    const surfaceFocused = this.isInputSurfaceFocused();
     return {
-      isInputSurfaceFocused: this._inputSurfaceFocused,
+      isInputSurfaceFocused: surfaceFocused,
       pointerDownCount: this._focusDebug.pointerDownCount,
       surfaceFocusCount: this._focusDebug.surfaceFocusCount,
       surfaceBlurCount: this._focusDebug.surfaceBlurCount,
