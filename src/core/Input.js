@@ -79,7 +79,7 @@ export class Input {
       const code = this._normalizeCode(event);
       if (!code) return;
 
-      if (this._shouldIgnoreTarget(event.target)) {
+      if (this._shouldIgnoreTarget(event.target, code)) {
         this._recordEvent('keydown-ignored', code, event);
         return;
       }
@@ -98,7 +98,7 @@ export class Input {
       const code = this._normalizeCode(event);
       if (!code) return;
 
-      if (this._shouldIgnoreTarget(event.target)) {
+      if (this._shouldIgnoreTarget(event.target, code)) {
         this._recordEvent('keyup-ignored', code, event);
         return;
       }
@@ -245,8 +245,12 @@ export class Input {
     return this._gameplayHeldKeys.has(code) || this._keys.has(code);
   }
 
-  _shouldIgnoreTarget(target) {
+  _shouldIgnoreTarget(target, code) {
     if (!(target instanceof Element)) return false;
+
+    if (this._gameplaySessionActive && this._reservedKeys.has(code)) {
+      return false;
+    }
 
     if (this._inputSurface && target === this._inputSurface) {
       return false;
