@@ -128,6 +128,7 @@ export class Input {
   startGameplaySession() {
     this._gameplaySessionActive = true;
     this._gameplayHeldKeys.clear();
+    this._syncGameplayHeldKeys();
   }
 
   endGameplaySession() {
@@ -183,7 +184,7 @@ export class Input {
     }
 
     if (this._gameplaySessionActive && CONTINUOUS_GAMEPLAY_KEYS.has(code)) {
-      return this._gameplayHeldKeys.has(code);
+      return this._isGameplayKeyDown(code);
     }
 
     return this._keys.has(code);
@@ -191,10 +192,10 @@ export class Input {
 
   axis2D() {
     if (this._gameplaySessionActive) {
-      const up = this._gameplayHeldKeys.has('KeyW') || this._gameplayHeldKeys.has('ArrowUp');
-      const down = this._gameplayHeldKeys.has('KeyS') || this._gameplayHeldKeys.has('ArrowDown');
-      const left = this._gameplayHeldKeys.has('KeyA') || this._gameplayHeldKeys.has('ArrowLeft');
-      const right = this._gameplayHeldKeys.has('KeyD') || this._gameplayHeldKeys.has('ArrowRight');
+      const up = this._isGameplayKeyDown('KeyW') || this._isGameplayKeyDown('ArrowUp');
+      const down = this._isGameplayKeyDown('KeyS') || this._isGameplayKeyDown('ArrowDown');
+      const left = this._isGameplayKeyDown('KeyA') || this._isGameplayKeyDown('ArrowLeft');
+      const right = this._isGameplayKeyDown('KeyD') || this._isGameplayKeyDown('ArrowRight');
 
       return {
         throttle: (up ? 1 : 0) + (down ? -1 : 0),
@@ -230,6 +231,18 @@ export class Input {
     if (event?.code && event.code !== 'Unidentified') return event.code;
     if (event?.key && KEY_TO_CODE[event.key]) return KEY_TO_CODE[event.key];
     return null;
+  }
+
+  _syncGameplayHeldKeys() {
+    for (const code of this._keys) {
+      if (CONTINUOUS_GAMEPLAY_KEYS.has(code)) {
+        this._gameplayHeldKeys.add(code);
+      }
+    }
+  }
+
+  _isGameplayKeyDown(code) {
+    return this._gameplayHeldKeys.has(code) || this._keys.has(code);
   }
 
   _shouldIgnoreTarget(target) {
