@@ -74,8 +74,10 @@ export class Input {
       manual: 0,
     };
     this._lastClearReason = 'initial';
+    this._handledKeyEvents = new WeakSet();
 
     this._onKeyDown = (event) => {
+      if (this._hasHandledKeyboardEvent(event)) return;
       const code = this._normalizeCode(event);
       if (!code) return;
 
@@ -95,6 +97,7 @@ export class Input {
     };
 
     this._onKeyUp = (event) => {
+      if (this._hasHandledKeyboardEvent(event)) return;
       const code = this._normalizeCode(event);
       if (!code) return;
 
@@ -145,6 +148,8 @@ export class Input {
 
     document.addEventListener('keydown', this._onKeyDown, { capture: true, passive: false });
     document.addEventListener('keyup', this._onKeyUp, { capture: true, passive: false });
+    window.addEventListener('keydown', this._onKeyDown, { capture: true, passive: false });
+    window.addEventListener('keyup', this._onKeyUp, { capture: true, passive: false });
     window.addEventListener('blur', this._onBlur);
     document.addEventListener('visibilitychange', this._onVisibilityChange);
     this._handlersBound = true;
@@ -155,6 +160,8 @@ export class Input {
 
     document.removeEventListener('keydown', this._onKeyDown, true);
     document.removeEventListener('keyup', this._onKeyUp, true);
+    window.removeEventListener('keydown', this._onKeyDown, true);
+    window.removeEventListener('keyup', this._onKeyUp, true);
     window.removeEventListener('blur', this._onBlur);
     document.removeEventListener('visibilitychange', this._onVisibilityChange);
     this.clear('manual');
@@ -221,6 +228,13 @@ export class Input {
     if (event?.code && event.code !== 'Unidentified') return event.code;
     if (keyCode) return keyCode;
     return null;
+  }
+
+  _hasHandledKeyboardEvent(event) {
+    if (!event || typeof event !== 'object') return false;
+    if (this._handledKeyEvents.has(event)) return true;
+    this._handledKeyEvents.add(event);
+    return false;
   }
 
   _syncGameplayHeldKeys() {
