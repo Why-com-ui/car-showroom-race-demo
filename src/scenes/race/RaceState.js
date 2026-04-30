@@ -321,6 +321,7 @@ export function createRaceState(ctx) {
         timeSec: '0.0',
         axis: { throttle: 0, steer: 0 },
         speedKmh: 0,
+        nitro: carCtrl?.getNitroState?.() ?? null,
         onGround: carCtrl?.state?.onGround ?? false,
         posY: Number(carCtrl?.state?.pos?.y?.toFixed?.(2) ?? 0),
         handbrake: false,
@@ -343,7 +344,8 @@ export function createRaceState(ctx) {
           // 2. 玩家车辆物理
           const axis = input.axis2D();
           const handbrake = input.down('Space');
-          carCtrl.step(dt, { ...axis, handbrake });
+          const nitro = input.down('ShiftLeft') || input.down('ShiftRight');
+          carCtrl.step(dt, { ...axis, handbrake, nitro });
 
           const boundsResult = boundsSys.enforce(carCtrl.state);
           if (boundsResult.out && boundsResult.distance > 50) {
@@ -397,7 +399,8 @@ export function createRaceState(ctx) {
 
           const speedKmh = Math.max(0, Math.round(Math.abs(carCtrl.state.speed) * 3.6));
           const { score, distance } = scoreSys.getDisplayData();
-          ui?.setHud?.({ speedKmh, mileage: distance, score, timeSec: t.toFixed(1) });
+          const nitroState = carCtrl.getNitroState();
+          ui?.setHud?.({ speedKmh, mileage: distance, score, timeSec: t.toFixed(1), nitro: nitroState });
           latestDebugSnapshot = {
             phase: 'race',
             frame: frameCount,
@@ -407,6 +410,7 @@ export function createRaceState(ctx) {
             onGround: carCtrl.state.onGround,
             posY: Number(carCtrl.state.pos.y.toFixed(2)),
             handbrake,
+            nitro: nitroState,
             roadMeshCount,
             initialReset: initialResetSnapshot,
           };

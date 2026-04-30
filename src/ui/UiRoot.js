@@ -20,6 +20,11 @@ export class UiRoot {
       onPrevCar: () => this.callbacks.onPrevCar?.(),
       onNextCar: () => this.callbacks.onNextCar?.(),
       onStartRace: () => this.callbacks.onStartRace?.(),
+      onQuickPaint: (color) => this.callbacks.onQuickPaint?.(color),
+      onToggleSpin: (active) => this.callbacks.onToggleSpin?.(active),
+      onToggleStageFx: (active) => this.callbacks.onToggleStageFx?.(active),
+      onToggleVenueScene: (active) => this.callbacks.onToggleVenueScene?.(active),
+      onVenueChange: (mode) => this.callbacks.onVenueChange?.(mode),
     });
 
     this.hud = new HUD({

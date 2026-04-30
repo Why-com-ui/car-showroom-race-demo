@@ -10,14 +10,11 @@ import { StateMachine } from './core/StateMachine.js';
 import { DEFAULT_CAR_MODELS, DEFAULT_SETTINGS, STATES } from './core/constants.js';
 
 import { UiRoot } from './ui/UiRoot.js';
-import { InputDebugOverlay } from './ui/InputDebugOverlay.js';
 
 import { createMenuState } from './scenes/menu/MenuState.js';
 import { createShowroomState } from './scenes/showroom/ShowroomState.js';
 import { createRaceIntroState } from './scenes/race/RaceIntroState.js';
 import { createRaceState } from './scenes/race/RaceState.js';
-
-import * as TrackModule from './scenes/race/tracks/Track_NeonSpline.js';
 
 function shouldIgnoreGameplayFocusTarget(target) {
   if (!(target instanceof Element)) return false;
@@ -50,7 +47,7 @@ function reportRuntimeError(error) {
   const app = new App({ mount, maxPixelRatio: DEFAULT_SETTINGS.maxPixelRatio });
   const store = new Store({
     carModels: DEFAULT_CAR_MODELS,
-    showroom: { carIndex: 0 },
+    showroom: { carIndex: 0, venueMode: 'storm' },
     carConfig: null,
     lastRace: null,
   });
@@ -60,9 +57,13 @@ function reportRuntimeError(error) {
   input.setDebugEnabled(debugInputEnabled);
   input.mount();
 
-  const inputDebugOverlay = debugInputEnabled
-    ? new InputDebugOverlay({ mount: document.body, input, app })
-    : null;
+  const createInputDebugOverlay = async () => {
+    if (!debugInputEnabled) return null;
+    const { InputDebugOverlay } = await import('./ui/InputDebugOverlay.js');
+    return new InputDebugOverlay({ mount: document.body, input, app });
+  };
+
+  const inputDebugOverlay = await createInputDebugOverlay();
   let debugOverlayRaf = 0;
   let focusPromptRaf = 0;
   inputDebugOverlay?.mount();
@@ -116,6 +117,21 @@ function reportRuntimeError(error) {
   let raceIntroState = null;
   let resultState = null;
   let raceMetricsProvider = null;
+  let ctx = null;
+  let trackModulePromise = null;
+
+  const ensureRaceTrackModule = async () => {
+    trackModulePromise ||= import('./scenes/race/tracks/Track_NeonSpline.js');
+    const trackModule = await trackModulePromise;
+    if (ctx) ctx.trackModule = trackModule;
+    return trackModule;
+  };
+
+  const startRaceFlow = async () => {
+    runtime.isStartingRace = true;
+    await ensureRaceTrackModule();
+    await transitionTo(raceIntroState);
+  };
 
   const setRaceDebugMetricsProvider = (provider) => {
     raceMetricsProvider = typeof provider === 'function' ? provider : null;
@@ -162,9 +178,28 @@ function reportRuntimeError(error) {
         void showroomState?.nextCar?.();
       },
 
+      onQuickPaint: (color) => {
+        void showroomState?.applyQuickPaint?.(color);
+      },
+
+      onToggleSpin: (active) => {
+        showroomState?.setAutoRotate?.(active);
+      },
+
+      onToggleStageFx: (active) => {
+        showroomState?.setStageFxActive?.(active);
+      },
+
+      onToggleVenueScene: (active) => {
+        showroomState?.setVenueSceneVisible?.(active);
+      },
+
+      onVenueChange: (mode) => {
+        showroomState?.setVenueMode?.(mode);
+      },
+
       onStartRace: () => {
-        runtime.isStartingRace = true;
-        void transitionTo(raceIntroState).catch(reportRuntimeError);
+        void startRaceFlow().catch(reportRuntimeError);
       },
 
       onExitRace: () => {
@@ -180,8 +215,7 @@ function reportRuntimeError(error) {
       },
 
       onRestartRace: () => {
-        runtime.isStartingRace = true;
-        void transitionTo(raceIntroState).catch(reportRuntimeError);
+        void startRaceFlow().catch(reportRuntimeError);
       },
 
       onBackToShowroom: () => {
@@ -222,7 +256,7 @@ function reportRuntimeError(error) {
   };
   monitorFocusPrompt();
 
-  const ctx = {
+  ctx = {
     app,
     store,
     assets,
@@ -230,7 +264,7 @@ function reportRuntimeError(error) {
     sm,
     ui,
     runtime,
-    trackModule: TrackModule,
+    trackModule: null,
     requestInputFocus: queueInputFocus,
     setRaceDebugMetricsProvider,
     debugFlags: {

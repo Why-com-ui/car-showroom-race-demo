@@ -26,6 +26,9 @@ export class CarController {
       groundNormal: new THREE.Vector3(0, 1, 0),
       isDrifting: false,
       driftFactor: 0,
+      nitro: 0,
+      nitroActive: false,
+      nitroCharging: false,
     };
 
     // 复用对象 (减少 GC)
@@ -77,6 +80,15 @@ export class CarController {
       skidWidth: 0.3,     // 刹车印宽度
       wheelOffsetZ: 1.2,  // 后轮距中心 Z 轴距离 (用于生成刹车印/尾焰)
       wheelOffsetX: 0.8,  // 后轮距中心 X 轴距离
+
+      // --- 氮气系统 ---
+      nitroCapacity: 100,
+      nitroStart: 0,
+      nitroChargeRate: 70,
+      nitroMinDriftSpeed: 14,
+      nitroUseRate: 42,
+      nitroBoostAccel: 90,
+      nitroMaxSpeedBonus: 32,
 
       // --- 调试 ---
       debug: false,
@@ -179,6 +191,9 @@ export class CarController {
     this.state.groundNormal.set(0, 1, 0);
     this.state.isDrifting = false;
     this.state.driftFactor = 0;
+    this.state.nitro = clamp(tuning.nitroStart ?? 0, 0, tuning.nitroCapacity);
+    this.state.nitroActive = false;
+    this.state.nitroCharging = false;
 
     this._clearEffects();
 
@@ -208,6 +223,9 @@ export class CarController {
     const throttle = clamp(input?.throttle ?? 0, -1, 1);
     const steer = clamp(input?.steer ?? 0, -1, 1);
     const handbrake = !!input?.handbrake;
+    const wantsNitro = !!input?.nitro;
+    state.nitroActive = false;
+    state.nitroCharging = false;
 
     // --- 1. 动力系统 ---
     if (throttle >= 0) {
@@ -221,9 +239,26 @@ export class CarController {
     state.speed -= state.speed * tuning.drag * dt;
     // 手刹阻力
     if (handbrake) state.speed *= Math.exp(-tuning.handbrakeDrag * dt);
-    
+
+    const canUseNitro =
+      wantsNitro &&
+      state.nitro > 0 &&
+      throttle > 0;
+
+    if (canUseNitro) {
+      state.nitroActive = true;
+      state.nitro = clamp(state.nitro - tuning.nitroUseRate * dt, 0, tuning.nitroCapacity);
+      if (state.speed < 0) state.speed = 0;
+      state.speed += tuning.nitroBoostAccel * (0.7 + throttle * 0.3) * dt;
+      if (!state.onGround) {
+        state.velocity.addScaledVector(this.getForward(new THREE.Vector3()), tuning.nitroBoostAccel * 0.65 * dt);
+      }
+    }
+
     // 速度限制
-    state.speed = clamp(state.speed, -tuning.reverseSpeed, tuning.maxSpeed);
+    const maxForwardSpeed = tuning.maxSpeed + (state.nitroActive ? tuning.nitroMaxSpeedBonus : 0);
+    state.speed = clamp(state.speed, -tuning.reverseSpeed, maxForwardSpeed);
+    if (state.nitro <= 0) state.nitroActive = false;
 
     // --- 2. 转向系统 ---
     // 计算当前转向灵敏度
@@ -256,6 +291,7 @@ export class CarController {
       const targetDrift = isSlip ? 1.0 : 0.0;
       state.driftFactor = lerp(state.driftFactor, targetDrift, dt * 5);
       state.isDrifting = state.driftFactor > 0.1;
+      this._updateNitroCharge(dt);
 
       // 动态抓地力
       const dynamicGrip = lerp(tuning.grip, tuning.driftGrip, state.driftFactor);
@@ -273,6 +309,7 @@ export class CarController {
       state.velocity.y -= tuning.gravity * dt; // 重力下落
       state.isDrifting = false;
       state.driftFactor = 0;
+      state.nitroCharging = false;
     }
 
     // --- 4. 积分位移 ---
@@ -290,6 +327,35 @@ export class CarController {
     if (this.tuning.debug && this._debugHelper) {
       this._updateDebugHelper();
     }
+  }
+
+  getNitroState() {
+    const capacity = Math.max(1, this.tuning.nitroCapacity || 100);
+    return {
+      level: Math.round(this.state.nitro),
+      capacity,
+      ratio: clamp(this.state.nitro / capacity, 0, 1),
+      active: !!this.state.nitroActive,
+      charging: !!this.state.nitroCharging,
+    };
+  }
+
+  _updateNitroCharge(dt) {
+    const { state, tuning } = this;
+    if (state.nitroActive) return;
+
+    const driftStrength = clamp((state.driftFactor - 0.25) / 0.75, 0, 1);
+    const fastEnough = Math.abs(state.speed) >= tuning.nitroMinDriftSpeed;
+    if (!state.onGround || !fastEnough || driftStrength <= 0 || state.nitro >= tuning.nitroCapacity) {
+      return;
+    }
+
+    state.nitroCharging = true;
+    state.nitro = clamp(
+      state.nitro + tuning.nitroChargeRate * driftStrength * dt,
+      0,
+      tuning.nitroCapacity
+    );
   }
 
   // =========================
@@ -390,11 +456,16 @@ export class CarController {
     fx.lastParticleTime += dt;
     
     // 喷射条件：油门踩下 + 速度 > 10 + 间隔满足
-    if (throttle > 0.5 && state.speed > 10 && fx.lastParticleTime > tuning.particleRate) {
+    const particleRate = state.nitroActive ? tuning.particleRate * 0.45 : tuning.particleRate;
+    if (throttle > 0.5 && state.speed > 10 && fx.lastParticleTime > particleRate) {
       fx.lastParticleTime = 0;
       // 双管齐下，喷射两次增加密度
       this._spawnExhaustParticle();
       this._spawnExhaustParticle();
+      if (state.nitroActive) {
+        this._spawnExhaustParticle();
+        this._spawnExhaustParticle();
+      }
     }
 
     // 更新现有粒子
@@ -450,7 +521,7 @@ export class CarController {
     // ★ 使用 SpriteMaterial 实现自发光效果
     const mat = new THREE.SpriteMaterial({
       map: this._particleTexture,
-      color: 0xffffff,
+      color: this.state.nitroActive ? 0x7df9ff : 0xffffff,
       transparent: true,
       opacity: 1.0,
       blending: THREE.AdditiveBlending, // 关键：叠加混合模式，越叠越亮
@@ -459,14 +530,17 @@ export class CarController {
 
     const sprite = new THREE.Sprite(mat);
     sprite.position.copy(worldPos);
-    sprite.scale.set(0.6, 0.6, 1); // 初始大小
+    const baseScale = this.state.nitroActive ? 0.95 : 0.6;
+    sprite.scale.set(baseScale, baseScale, 1); // 初始大小
 
     // 计算喷射速度
     const forward = this.getForward(new THREE.Vector3());
     
     // 粒子初速度 = (车速 * 0.8) [惯性] + (向后喷射 * 随机值)
     const vel = forward.clone().multiplyScalar(this.state.speed * 0.8); 
-    const ejection = forward.clone().multiplyScalar(-5 - Math.random() * 8); // 向后猛喷
+    const ejectionPower = this.state.nitroActive ? 18 : 5;
+    const ejectionSpread = this.state.nitroActive ? 16 : 8;
+    const ejection = forward.clone().multiplyScalar(-ejectionPower - Math.random() * ejectionSpread); // 向后猛喷
     vel.add(ejection);
     
     // 增加随机散布 (Turbulence)

@@ -32,6 +32,13 @@ export class HUD {
           <div class="ui-hud-value"><span data-bind="time">0.0</span> <span style="font-size:12px">s</span></div>
         </div>
 
+        <div class="ui-hud-item ui-hud-nitro">
+          <div class="ui-hud-label">N2O</div>
+          <div class="ui-nitro-meter" data-bind="nitro-meter">
+            <div class="ui-nitro-fill" data-bind="nitro-fill"></div>
+          </div>
+        </div>
+
         <div class="ui-hud-actions">
           <button class="ui-btn ui-btn-ghost" data-action="camera">视角(C)</button>
           <button class="ui-btn ui-btn-ghost" data-action="reset">复位(R)</button>
@@ -47,6 +54,8 @@ export class HUD {
     this.$mileage = this.root.querySelector('[data-bind="mileage"]');
     this.$score = this.root.querySelector('[data-bind="score"]');
     this.$time = this.root.querySelector('[data-bind="time"]');
+    this.$nitroMeter = this.root.querySelector('[data-bind="nitro-meter"]');
+    this.$nitroFill = this.root.querySelector('[data-bind="nitro-fill"]');
     this.$countdown = this.root.querySelector('[data-bind="countdown"]');
 
     this._onClick = (e) => {
@@ -70,11 +79,12 @@ export class HUD {
    * @param {number|string} [payload.score] 得分 (新增)
    * @param {number|string} [payload.timeSec] 时间
    */
-  setHud({ speedKmh, mileage, score, timeSec } = {}) {
+  setHud({ speedKmh, mileage, score, timeSec, nitro } = {}) {
     if (typeof speedKmh !== 'undefined') this.setSpeed(speedKmh);
     if (typeof mileage !== 'undefined') this.setMileage(mileage);
     if (typeof score !== 'undefined') this.setScore(score);
     if (typeof timeSec !== 'undefined') this.setTime(timeSec);
+    if (typeof nitro !== 'undefined') this.setNitro(nitro);
   }
 
   setSpeed(speedKmh) {
@@ -96,6 +106,18 @@ export class HUD {
 
   setTime(timeSec) {
     this.$time.textContent = String(timeSec ?? '0.0');
+  }
+
+  setNitro(nitro) {
+    if (!this.$nitroFill || !this.$nitroMeter) return;
+
+    const ratio = typeof nitro === 'number'
+      ? clamp01(nitro)
+      : clamp01(nitro?.ratio ?? ((nitro?.level ?? 0) / Math.max(1, nitro?.capacity ?? 100)));
+
+    this.$nitroFill.style.width = `${Math.round(ratio * 100)}%`;
+    this.$nitroMeter.classList.toggle('is-active', !!nitro?.active);
+    this.$nitroMeter.classList.toggle('is-charging', !!nitro?.charging);
   }
 
   setCountdown(n) {
@@ -121,4 +143,10 @@ export class HUD {
   destroy() {
     this.root.removeEventListener('click', this._onClick);
   }
+}
+
+function clamp01(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, n));
 }

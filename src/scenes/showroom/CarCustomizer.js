@@ -1,11 +1,11 @@
 // src/scenes/showroom/CarCustomizer.js
 import * as THREE from 'three';
-import * as dat from 'dat.gui';
 
 export class CarCustomizer {
   constructor() {
     this.gui = null;
     this._targets = null;
+    this._controllers = [];
   }
 
   collectTargets(carRoot) {
@@ -108,9 +108,13 @@ export class CarCustomizer {
     }
   }
 
-  bindGUI(carRoot, configRef, onConfigChange) {
+  async bindGUI(carRoot, configRef, onConfigChange) {
     this.disposeGUI();
-    this.gui = new dat.GUI();
+    this._controllers = [];
+
+    const dat = await import('dat.gui');
+    const GUI = dat.GUI || dat.default?.GUI || dat.default;
+    this.gui = new GUI();
     this.gui.domElement.classList.add('datgui-theme');
 
     // 监听逻辑：onChange 时调用 applyConfig 更新视图，同时通知外部保存
@@ -121,15 +125,21 @@ export class CarCustomizer {
     };
 
     const f1 = this.gui.addFolder('车漆 (Body Paint)');
-    f1.addColor(configRef, 'bodyColor').name('颜色').onChange(changeHandler);
-    f1.add(configRef, 'metalness', 0, 1, 0.01).name('金属度').onChange(changeHandler);
-    f1.add(configRef, 'roughness', 0, 1, 0.01).name('粗糙度').onChange(changeHandler);
+    this._controllers.push(f1.addColor(configRef, 'bodyColor').name('颜色').onChange(changeHandler));
+    this._controllers.push(f1.add(configRef, 'metalness', 0, 1, 0.01).name('金属度').onChange(changeHandler));
+    this._controllers.push(f1.add(configRef, 'roughness', 0, 1, 0.01).name('粗糙度').onChange(changeHandler));
     f1.open();
 
     const f2 = this.gui.addFolder('玻璃 (Glass)');
-    f2.add(configRef, 'glassTransmission', 0, 1, 0.01).name('通透度').onChange(changeHandler);
-    f2.addColor(configRef, 'glassTint').name('颜色').onChange(changeHandler);
+    this._controllers.push(f2.add(configRef, 'glassTransmission', 0, 1, 0.01).name('通透度').onChange(changeHandler));
+    this._controllers.push(f2.addColor(configRef, 'glassTint').name('颜色').onChange(changeHandler));
     f2.open();
+  }
+
+  updateGUI() {
+    for (const controller of this._controllers) {
+      controller.updateDisplay?.();
+    }
   }
 
   disposeGUI() {
@@ -137,6 +147,7 @@ export class CarCustomizer {
       this.gui.destroy();
       this.gui = null;
     }
+    this._controllers = [];
   }
 
   dispose() {

@@ -12,6 +12,11 @@ export function createShowroomState(ctx) {
   let showroom = null;
   let carRoot = null;
   let customizer = null;
+  let carConfigRef = null;
+  let autoRotateActive = true;
+  let stageFxActive = true;
+  let venueMode = store.getState().showroom?.venueMode || 'storm';
+  let venueSceneVisible = store.getState().showroom?.venueSceneVisible ?? store.getState().showroom?.venueShellVisible ?? true;
 
   function getModels() {
     const s = store.getState();
@@ -28,6 +33,24 @@ export function createShowroomState(ctx) {
     store.setState((prev) => ({
       showroom: { ...(prev.showroom || {}), carIndex: next },
     }));
+  }
+
+  function applyVenueMode(mode) {
+    venueMode = mode || 'storm';
+    store.setState((prev) => ({
+      showroom: { ...(prev.showroom || {}), venueMode },
+    }));
+    showroom?.setVenueMode?.(venueMode);
+    ui?.showroom?.setVenueMode?.(venueMode);
+  }
+
+  function applyVenueSceneVisible(active) {
+    venueSceneVisible = !!active;
+    store.setState((prev) => ({
+      showroom: { ...(prev.showroom || {}), venueSceneVisible },
+    }));
+    showroom?.setVenueSceneVisible?.(venueSceneVisible);
+    ui?.showroom?.setVenueSceneVisible?.(venueSceneVisible);
   }
 
   function ensureCarConfig() {
@@ -72,17 +95,20 @@ export function createShowroomState(ctx) {
 
     // 应用改车配置
     const cfg = ensureCarConfig();
+    carConfigRef = cfg;
     customizer.collectTargets(root);
     customizer.applyConfig(root, cfg);
+    ui?.syncCarConfig?.(cfg);
 
     showroom.scene.add(root);
     carRoot = root;
 
     // 绑定 GUI
-    customizer.bindGUI(root, cfg, (nextCfg) => {
+    await customizer.bindGUI(root, cfg, (nextCfg) => {
       store.setState({ carConfig: nextCfg });
       ui?.syncCarConfig?.(nextCfg);
     });
+    ui?.showroom?.setAdvancedVisible?.(false);
 
     // 添加场景特效控制 GUI
     if (customizer.gui) {
@@ -90,9 +116,9 @@ export function createShowroomState(ctx) {
       
       const fxState = {
         beams: false, // 默认关闭体积光 (会由 playLightIntro 动画开启)
-        dust: true,
-        particles: true,
-        glow: true,
+        dust: stageFxActive,
+        particles: stageFxActive,
+        glow: stageFxActive,
       };
 
       const updateFx = (key, val) => {
@@ -106,6 +132,7 @@ export function createShowroomState(ctx) {
       
       // 初始化特效状态
       Object.keys(fxState).forEach(k => updateFx(k, fxState[k]));
+      ui?.showroom?.setStageFxActive?.(stageFxActive);
 
       fxFolder.open();
     }
@@ -119,13 +146,27 @@ export function createShowroomState(ctx) {
 
       showroom = new ShowroomScene({ renderer: app.renderer });
       customizer = new CarCustomizer();
+      showroom.setVenueMode?.(venueMode);
+      showroom.setVenueSceneVisible?.(venueSceneVisible);
 
       // ★ 关键：连接 UI 的视角切换事件
       // 直接挂载回调到 ui.showroom 实例上，无需修改 UiRoot
       if (ui?.showroom) {
         ui.showroom.onCamChange = (mode) => {
+          ui.showroom.setCameraMode?.(mode);
+          autoRotateActive = false;
+          ui.showroom.setSpinActive?.(autoRotateActive);
           showroom?.focusCamera(mode);
         };
+        ui.showroom.onVenueChange = (mode) => {
+          applyVenueMode(mode);
+        };
+        ui.showroom.setCameraMode?.('default');
+        ui.showroom.setVenueMode?.(venueMode);
+        ui.showroom.setSpinActive?.(autoRotateActive);
+        ui.showroom.setStageFxActive?.(stageFxActive);
+        ui.showroom.setVenueSceneVisible?.(venueSceneVisible);
+        ui.showroom.setAdvancedVisible?.(false);
       }
 
       const idx = getCarIndex();
@@ -154,10 +195,12 @@ export function createShowroomState(ctx) {
       // 清理 UI 回调，防止内存泄漏或错误调用
       if (ui?.showroom) {
         ui.showroom.onCamChange = null;
+        ui.showroom.onVenueChange = null;
       }
 
       customizer?.dispose?.();
       customizer = null;
+      carConfigRef = null;
 
       // ★ 车辆无缝传递逻辑
       const isGoingToRace = ctx.runtime.isStartingRace === true;
@@ -199,6 +242,43 @@ export function createShowroomState(ctx) {
       const next = (getCarIndex() + 1) % models.length;
       setCarIndex(next);
       await loadCarByIndex(next);
+    },
+
+    applyQuickPaint(color) {
+      if (!color || !carRoot || !customizer) return;
+      const cfg = normalizeCarConfig({ ...(carConfigRef || ensureCarConfig()), bodyColor: color });
+      if (carConfigRef) Object.assign(carConfigRef, cfg);
+      else carConfigRef = cfg;
+      store.setState({ carConfig: cfg });
+      customizer.applyConfig(carRoot, carConfigRef);
+      customizer.updateGUI?.();
+      ui?.syncCarConfig?.(carConfigRef);
+    },
+
+    setAutoRotate(active) {
+      autoRotateActive = !!active;
+      showroom?.setAutoRotate?.(autoRotateActive);
+      ui?.showroom?.setSpinActive?.(autoRotateActive);
+    },
+
+    setStageFxActive(active) {
+      stageFxActive = !!active;
+      showroom?.setEffectState?.('dust', stageFxActive);
+      showroom?.setEffectState?.('particles', stageFxActive);
+      showroom?.setEffectState?.('glow', stageFxActive);
+      ui?.showroom?.setStageFxActive?.(stageFxActive);
+    },
+
+    setVenueMode(mode) {
+      applyVenueMode(mode);
+    },
+
+    setVenueSceneVisible(active) {
+      applyVenueSceneVisible(active);
+    },
+
+    setVenueShellVisible(active) {
+      applyVenueSceneVisible(active);
     },
 
     getCarConfig() {

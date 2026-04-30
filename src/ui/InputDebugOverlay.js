@@ -107,12 +107,19 @@ function formatRaceSnapshot(race) {
     `time: ${race.timeSec ?? '0.0'}s`,
     `axis: ${formatAxis(race.axis)}`,
     `speed: ${race.speedKmh ?? 0} km/h`,
+    `nitro: ${formatNitro(race.nitro)}`,
     `onGround: ${race.onGround ?? false}`,
     `posY: ${race.posY ?? '-'}`,
     `handbrake: ${race.handbrake ?? false}`,
     `road meshes: ${race.roadMeshCount ?? 0}`,
     `reset state: ${race.initialReset ? `y=${race.initialReset.posY}, onGround=${race.initialReset.onGround}` : '-'}`,
   ].join('\n');
+}
+
+function formatNitro(nitro = {}) {
+  const pct = Math.round((nitro.ratio ?? 0) * 100);
+  const state = nitro.active ? 'active' : nitro.charging ? 'charging' : 'idle';
+  return `${pct}% ${state}`;
 }
 
 function formatEventLine(entry) {

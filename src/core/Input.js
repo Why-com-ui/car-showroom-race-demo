@@ -16,6 +16,8 @@ const DEFAULT_RESERVED_KEYS = new Set([
   'ArrowLeft',
   'ArrowRight',
   'Space',
+  'ShiftLeft',
+  'ShiftRight',
   'KeyC',
   'KeyR',
   'Escape',
@@ -31,6 +33,8 @@ const CONTINUOUS_GAMEPLAY_KEYS = new Set([
   'ArrowLeft',
   'ArrowRight',
   'Space',
+  'ShiftLeft',
+  'ShiftRight',
 ]);
 
 const KEY_TO_CODE = {
