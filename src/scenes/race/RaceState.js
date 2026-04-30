@@ -95,6 +95,8 @@ export function createRaceState(ctx) {
     const userRoughness = cfg.roughness ?? 0.2;
 
     for (const m of targetMeshes) {
+      m.castShadow = true;
+      m.receiveShadow = true;
       m.material = new THREE.MeshPhysicalMaterial();
       m.material.color.copy(bodyColor);
       m.material.metalness = userMetalness;
@@ -115,6 +117,8 @@ export function createRaceState(ctx) {
     const glassTrans = cfg.glassTransmission ?? 0.9;
 
     for (const m of glassMeshes) {
+      m.castShadow = true;
+      m.receiveShadow = true;
       m.material = new THREE.MeshPhysicalMaterial({
         color: glassTint,
         metalness: 0.9, 
@@ -173,6 +177,8 @@ export function createRaceState(ctx) {
     dir.position.set(50, 100, 50);
     dir.castShadow = true;
     dir.shadow.mapSize.set(1024, 1024);
+    dir.shadow.bias = -0.00018;
+    dir.shadow.normalBias = 0.035;
     const d = 100;
     dir.shadow.camera.left = -d; dir.shadow.camera.right = d;
     dir.shadow.camera.top = d; dir.shadow.camera.bottom = -d;
@@ -183,6 +189,7 @@ export function createRaceState(ctx) {
     trackData = trackModule.createTrack(THREE, { seed: Math.random() * 1000 });
     applyTrackSceneTheme();
     scene.add(trackData.root);
+    applyTrackShadowRoles(trackData.root);
 
     // 玩家车辆
     const s = store.getState();
@@ -217,6 +224,7 @@ export function createRaceState(ctx) {
     selectedCarInfo = setup.carInfo || null;
     selectedCarConfig = setup.carConfig || store.getState().carConfig || {};
     applyTrackSceneTheme();
+    applyTrackShadowRoles(trackData?.root);
     return true;
   }
 
@@ -238,6 +246,26 @@ export function createRaceState(ctx) {
     const fog = theme.fog ?? background;
     scene.background = new THREE.Color(background);
     scene.fog = new THREE.FogExp2(fog, theme.fogDensity ?? 0.001);
+  }
+
+  function applyTrackShadowRoles(root) {
+    if (!root?.traverse) return;
+    root.traverse((node) => {
+      if (!node?.isMesh && !node?.isInstancedMesh) return;
+      const name = String(node.name || '').toLowerCase();
+      if (name.startsWith('roadchunk_') || name.includes('shoulder')) {
+        node.castShadow = false;
+        node.receiveShadow = true;
+        return;
+      }
+      if (name.includes('coin') || name.includes('nitro')) {
+        node.castShadow = true;
+        node.receiveShadow = false;
+        return;
+      }
+      node.castShadow = true;
+      node.receiveShadow = true;
+    });
   }
 
   return {

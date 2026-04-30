@@ -50,6 +50,20 @@ const DEFAULT_CONFIG = {
     roadMetalness: 0.44,
     roadEmissiveIntensity: 0.36,
   },
+  lighting: {
+    ambient: 0.72,
+    hemi: 1.0,
+    keyColor: 0xffffff,
+    keyIntensity: 1.18,
+    keyPosition: [36, 76, 26],
+    fillColor: 0x22d3ee,
+    fillIntensity: 0.55,
+    fillPosition: [-42, 18, -56],
+    accentIntensity: 1.8,
+    accentRange: 190,
+    shadowMapSize: 1024,
+    shadowRange: 115,
+  },
   features: {},
 };
 
@@ -138,6 +152,7 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
       road.userData.__chunkRef = this;
       road.userData.__boundsSamples = this.mainBounds;
       road.frustumCulled = false;
+      applyShadowRole(road, 'road');
       this.root.add(road);
       this.roadMeshes.push(road);
       roadMeshes.push(road);
@@ -152,6 +167,7 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
         -0.06,
       );
       shoulder.frustumCulled = false;
+      applyShadowRole(shoulder, 'road');
       this.root.add(shoulder);
       this.geometries.push(shoulder.geometry);
 
@@ -177,14 +193,16 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
       const phase = branch.phase ?? 1;
       if (this.id % every !== phase) return null;
 
-      const side = this.id % 2 === 0 ? 1 : -1;
+      const side = Number.isFinite(branch.side) ? Math.sign(branch.side || 1) : (this.id % 2 === 0 ? 1 : -1);
       const offset = branch.offset ?? cfg.roadWidth * 0.92;
       const branchWidth = branch.width ?? cfg.roadWidth * 0.82;
+      const branchBaseLift = branch.baseLift ?? 0.06;
+      const branchLift = branch.lift ?? 0.16;
       const branchSamples = samples.map((sample) => {
         const alpha = branchAlpha(sample.t, branch.start ?? 0.18, branch.end ?? 0.84);
         const center = sample.center.clone()
           .addScaledVector(sample.right, side * offset * alpha)
-          .addScaledVector(sample.normal, 0.08 * alpha);
+          .addScaledVector(sample.normal, branchBaseLift + branchLift * alpha);
         return { ...sample, center, route: 'branch', roadWidth: branchWidth, branchAlpha: alpha };
       });
 
@@ -194,25 +212,51 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
         branchWidth / 2,
         materials.branchRoad || materials.road,
         `RoadChunk_${cfg.id}_branch_${this.id}`,
-        0.02,
+        0,
       );
       branchRoad.userData.__chunkRef = this;
       branchRoad.userData.__boundsSamples = [];
       branchRoad.frustumCulled = false;
+      applyShadowRole(branchRoad, 'road');
       this.root.add(branchRoad);
       this.roadMeshes.push(branchRoad);
       roadMeshes.push(branchRoad);
       this.geometries.push(branchRoad.geometry);
 
       for (let i = 0; i < branchSamples.length; i += 2) {
-        if ((branchSamples[i].branchAlpha ?? 0) < 0.04) continue;
+        if ((branchSamples[i].branchAlpha ?? 0) < (branch.boundsMinAlpha ?? 0.025)) continue;
         const data = makeBoundsSample(branchSamples[i], branchWidth, 'branch', this.id);
         this.boundsData.push(data);
         branchRoad.userData.__boundsSamples.push(data);
       }
 
+      this._addBranchJunctions(samples, branchSamples, side, offset, branchWidth);
       this._addBranchMarkers(branchSamples, side);
       return branchSamples;
+    }
+
+    _addBranchJunctions(samples, branchSamples, side, offset, branchWidth) {
+      const split = findBranchJunctionSample(samples, branchSamples, true);
+      const merge = findBranchJunctionSample(samples, branchSamples, false);
+      for (const pair of [split, merge]) {
+        if (!pair) continue;
+        const { main, branchSample } = pair;
+        const alpha = clamp(branchSample.branchAlpha ?? 0.2, 0.12, 0.45);
+        const pos = main.center.clone()
+          .addScaledVector(main.right, side * offset * alpha * 0.5)
+          .addScaledVector(main.normal, 0.08);
+        const plateWidth = cfg.roadWidth + branchWidth * 0.45 + Math.abs(offset) * alpha;
+        const plate = addBox(T, this.root, geometries.box, materials.road, [plateWidth, 0.12, 7.8], pos, main.tangent, main.right, main.normal);
+        plate.name = `RoadChunk_${cfg.id}_junction_${this.id}_${pair.kind}`;
+        plate.userData.__chunkRef = this;
+        plate.userData.__boundsSamples = [
+          makeBoundsSample(main, cfg.roadWidth, 'main', this.id),
+          makeBoundsSample(branchSample, branchWidth, 'branch', this.id),
+        ];
+        applyShadowRole(plate, 'road');
+        roadMeshes.push(plate);
+        this.roadMeshes.push(plate);
+      }
     }
 
     _addRoadDetails(samples, branchSamples) {
@@ -244,6 +288,7 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
         const coin = new T.Mesh(geometries.coin, materials.coin);
         coin.name = `${cfg.id}_Coin`;
         coin.position.copy(pos);
+        applyShadowRole(coin, 'small');
         this.root.add(coin);
         interactables.push(makeInteractable('coin', coin, this.id, { active: true, value: 100, radius: 2.5 }));
       }
@@ -258,6 +303,7 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
         pad.name = `${cfg.id}_NitroPad`;
         pad.userData.phase = rng() * Math.PI * 2;
         orientObject(T, pad, pos, sample.tangent, sample.right, sample.normal);
+        applyShadowRole(pad, 'small');
         this.root.add(pad);
         interactables.push(makeInteractable('nitro_pad', pad, this.id, { active: true, nitro: cfg.features.nitroAmount ?? 35, value: 0, radius: 4.2 }));
       }
@@ -267,6 +313,7 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
       if (cfg.features.blueRain) addBlueRainScenery(T, this.root, cfg, samples, materials, geometries, rng);
       if (cfg.features.auroraValley) addAuroraScenery(T, this.root, cfg, samples, materials, geometries, rng);
       if (cfg.features.quantumCity) addQuantumScenery(T, this.root, cfg, samples, branchSamples, materials, geometries, rng);
+      if (cfg.features.crystalCanyon) addCrystalCanyonScenery(T, this.root, cfg, samples, materials, geometries, rng);
     }
 
     dispose() {
@@ -469,6 +516,23 @@ function makeRibbonMesh(T, samples, halfWidth, mat, name, normalOffset = 0) {
   return mesh;
 }
 
+function findBranchJunctionSample(samples, branchSamples, first = true) {
+  const threshold = 0.08;
+  const order = first
+    ? branchSamples.map((sample, index) => [sample, index])
+    : branchSamples.map((sample, index) => [sample, index]).reverse();
+  const found = order.find(([sample]) => (sample.branchAlpha ?? 0) > threshold);
+  if (!found) return null;
+  const [branchSample, index] = found;
+  const main = samples[index];
+  if (!main) return null;
+  return {
+    main,
+    branchSample,
+    kind: first ? 'split' : 'merge',
+  };
+}
+
 function addRoadStriping(T, parent, cfg, samples, materials, geometries, isBranch = false) {
   for (let i = 1; i < samples.length; i += 2) {
     const a = samples[i - 1];
@@ -570,6 +634,7 @@ function addAuroraScenery(T, parent, cfg, samples, materials, geometries, rng) {
       mountain.scale.set(18 + rng() * 22, height, 18 + rng() * 26);
       orientObject(T, mountain, pos, sample.tangent, sample.right, worldUpLike(sample.normal));
       mountain.rotation.y += rng() * Math.PI;
+      applyShadowRole(mountain, 'large');
       parent.add(mountain);
     }
   }
@@ -598,6 +663,41 @@ function addQuantumScenery(T, parent, cfg, samples, branchSamples, materials, ge
   }
 }
 
+function addCrystalCanyonScenery(T, parent, cfg, samples, materials, geometries, rng) {
+  for (let i = 2; i < samples.length; i += 5) {
+    const sample = samples[i];
+    for (const side of [-1, 1]) {
+      const distance = cfg.roadWidth / 2 + 30 + rng() * 22;
+      const height = 14 + rng() * 34;
+      const width = 7 + rng() * 10;
+      const depth = 10 + rng() * 24;
+      const wallPos = sample.center.clone()
+        .addScaledVector(sample.right, side * distance)
+        .addScaledVector(worldUpLike(sample.normal), height * 0.5 - 2);
+      addBox(T, parent, geometries.box, materials.distant, [width, height, depth], wallPos, sample.tangent, sample.right, worldUpLike(sample.normal));
+
+      if (i % 10 === 2) {
+        const crystalPos = sample.center.clone()
+          .addScaledVector(sample.right, side * (cfg.roadWidth / 2 + 12 + rng() * 10))
+          .addScaledVector(worldUpLike(sample.normal), 4.5 + rng() * 2);
+        const crystal = new T.Mesh(geometries.cone, materials.crystal || materials.glow);
+        crystal.name = `${cfg.id}_Crystal`;
+        crystal.scale.set(2.2 + rng() * 2.8, 9 + rng() * 11, 2.2 + rng() * 2.8);
+        orientObject(T, crystal, crystalPos, sample.tangent, sample.right, worldUpLike(sample.normal));
+        crystal.rotation.y += rng() * Math.PI;
+        applyShadowRole(crystal, 'large');
+        parent.add(crystal);
+      }
+    }
+  }
+
+  for (let i = 4; i < samples.length; i += 9) {
+    const sample = samples[i];
+    const pos = sample.center.clone().addScaledVector(sample.normal, 0.11);
+    addBox(T, parent, geometries.box, materials.marker, [cfg.roadWidth * 0.54, 0.06, 0.28], pos, sample.tangent, sample.right, sample.normal);
+  }
+}
+
 function addPortal(T, parent, cfg, sample, materials, geometries, side = 1, lateralOffset = 0) {
   const pos = sample.center.clone()
     .addScaledVector(sample.right, lateralOffset)
@@ -612,21 +712,21 @@ function addPortal(T, parent, cfg, sample, materials, geometries, side = 1, late
 
 function addGlobalSceneSet(T, root, cfg, rng, materials, geometries) {
   const features = cfg.features || {};
-  if (features.blueRain || features.quantumCity || features.auroraValley) {
+  if (features.blueRain || features.quantumCity || features.auroraValley || features.crystalCanyon) {
     const geo = new T.BufferGeometry();
-    const count = features.auroraValley ? 160 : 260;
+    const count = features.auroraValley ? 160 : (features.crystalCanyon ? 210 : 260);
     const positions = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (rng() - 0.5) * (features.auroraValley ? 300 : 190);
-      positions[i * 3 + 1] = 2 + rng() * (features.auroraValley ? 70 : 52);
+      positions[i * 3] = (rng() - 0.5) * (features.auroraValley ? 300 : (features.crystalCanyon ? 240 : 190));
+      positions[i * 3 + 1] = 2 + rng() * (features.auroraValley ? 70 : (features.crystalCanyon ? 44 : 52));
       positions[i * 3 + 2] = (rng() - 0.5) * 360;
     }
     geo.setAttribute('position', new T.BufferAttribute(positions, 3));
     const mat = new T.PointsMaterial({
       color: cfg.colors.particle,
-      size: features.blueRain ? 0.34 : 0.5,
+      size: features.blueRain ? 0.34 : (features.crystalCanyon ? 0.42 : 0.5),
       transparent: true,
-      opacity: features.blueRain ? 0.38 : 0.26,
+      opacity: features.blueRain ? 0.38 : (features.crystalCanyon ? 0.22 : 0.26),
       depthWrite: false,
       blending: T.AdditiveBlending,
     });
@@ -664,16 +764,62 @@ function addGlobalSceneSet(T, root, cfg, rng, materials, geometries) {
       root.add(beam);
     }
   }
+
+  if (features.crystalCanyon) {
+    for (let i = 0; i < 6; i++) {
+      const rib = new T.Mesh(geometries.box, materials.crystal || materials.glow);
+      rib.position.set((i - 2.5) * 34, 10 + (i % 2) * 4, -84 - i * 42);
+      rib.scale.set(1.2, 22 + i * 2, 1.2);
+      rib.rotation.z = 0.16 * (i % 2 ? 1 : -1);
+      rib.castShadow = true;
+      root.add(rib);
+    }
+  }
 }
 
 function addTrackLights(T, root, cfg) {
   const features = cfg.features || {};
-  root.add(new T.AmbientLight(0xffffff, features.auroraValley ? 0.92 : 0.72));
-  root.add(new T.HemisphereLight(cfg.colors.glass, cfg.colors.background, features.blueRain ? 1.28 : 1.0));
-  const key = new T.DirectionalLight(features.auroraValley ? 0xe7fff6 : 0xffffff, features.quantumCity ? 1.42 : 1.18);
-  key.position.set(36, 76, 26);
+  const lighting = cfg.lighting || {};
+  root.add(new T.AmbientLight(0xffffff, lighting.ambient ?? (features.auroraValley ? 0.92 : 0.72)));
+  root.add(new T.HemisphereLight(
+    cfg.colors.glass,
+    cfg.colors.background,
+    lighting.hemi ?? (features.blueRain ? 1.28 : 1.0),
+  ));
+
+  const key = new T.DirectionalLight(
+    lighting.keyColor ?? (features.auroraValley ? 0xe7fff6 : 0xffffff),
+    lighting.keyIntensity ?? (features.quantumCity ? 1.42 : 1.18),
+  );
+  key.position.set(...(lighting.keyPosition || [36, 76, 26]));
+  key.castShadow = true;
+  key.shadow.mapSize.set(lighting.shadowMapSize ?? 1024, lighting.shadowMapSize ?? 1024);
+  key.shadow.bias = -0.00018;
+  key.shadow.normalBias = 0.035;
+  key.shadow.camera.near = 4;
+  key.shadow.camera.far = 230;
+  const shadowRange = lighting.shadowRange ?? 115;
+  key.shadow.camera.left = -shadowRange;
+  key.shadow.camera.right = shadowRange;
+  key.shadow.camera.top = shadowRange;
+  key.shadow.camera.bottom = -shadowRange;
+  key.target.position.set(0, 0, -70);
   root.add(key);
-  const accent = new T.PointLight(cfg.colors.rail, features.quantumCity ? 2.6 : 1.8, 190);
+  root.add(key.target);
+
+  const fill = new T.PointLight(
+    lighting.fillColor ?? cfg.colors.rail,
+    lighting.fillIntensity ?? 0.55,
+    lighting.fillRange ?? 155,
+  );
+  fill.position.set(...(lighting.fillPosition || [-42, 18, -56]));
+  root.add(fill);
+
+  const accent = new T.PointLight(
+    cfg.colors.rail,
+    lighting.accentIntensity ?? (features.quantumCity ? 2.6 : 1.8),
+    lighting.accentRange ?? 190,
+  );
   accent.position.set(0, 16, -48);
   root.add(accent);
 }
@@ -752,6 +898,15 @@ function createMaterials(T, cfg) {
       emissive: colors.roadEmissive,
       emissiveIntensity: 0.12,
       flatShading: true,
+    }),
+    crystal: new T.MeshStandardMaterial({
+      color: colors.glass,
+      roughness: 0.18,
+      metalness: 0.62,
+      emissive: colors.glass,
+      emissiveIntensity: 0.84,
+      transparent: true,
+      opacity: 0.86,
     }),
   };
 }
@@ -846,8 +1001,34 @@ function addBox(T, parent, geo, mat, scale, pos, tangent, right, normal) {
   const mesh = new T.Mesh(geo, mat);
   mesh.scale.set(scale[0], scale[1], scale[2]);
   orientObject(T, mesh, pos, tangent, right, normal);
+  applyShadowRole(mesh, inferShadowRole(scale));
   parent.add(mesh);
   return mesh;
+}
+
+function applyShadowRole(mesh, role) {
+  if (!mesh) return mesh;
+  if (role === 'road') {
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+  } else if (role === 'large') {
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+  } else if (role === 'small') {
+    mesh.castShadow = true;
+    mesh.receiveShadow = false;
+  } else {
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+  }
+  return mesh;
+}
+
+function inferShadowRole(scale = [1, 1, 1]) {
+  const [sx = 1, sy = 1, sz = 1] = scale;
+  if (sy > 2.4 || sx > 4 || sz > 4) return 'large';
+  if (sx > 1.5 || sz > 1.5) return 'road';
+  return 'none';
 }
 
 function orientObject(T, obj, pos, tangent, right, normal) {

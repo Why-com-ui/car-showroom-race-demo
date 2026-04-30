@@ -120,9 +120,9 @@ export class App {
 
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.01,
-      0.01,
-      1.5
+      0.18,
+      0.26,
+      0.88
     );
     this.composer.addPass(bloomPass);
 

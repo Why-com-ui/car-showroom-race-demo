@@ -20,26 +20,34 @@ export const RACE_TRACKS = Object.freeze([
   {
     id: 'blue_rain',
     name: '蓝雨玻璃高架',
-    tagline: '湿滑反光路面，大弧弯和长直道',
-    tags: ['湿滑', '玻璃墙', '长直道'],
+    tagline: '更宽的湿滑高架，连续大弧弯和玻璃护墙',
+    tags: ['湿滑', '宽弯', '玻璃墙'],
     difficulty: '中',
     style: '高速大弧',
   },
   {
     id: 'aurora',
     name: '极光山脉',
-    tagline: '超宽山谷路，平滑起伏和远景极光',
-    tags: ['超宽', '极光', '巡航'],
+    tagline: '超宽山谷路，平滑起伏和连续巡航弯',
+    tags: ['超宽', '大弯', '极光'],
     difficulty: '低',
     style: '高速巡航',
   },
   {
     id: 'quantum',
     name: '量子城市',
-    tagline: '量子门、发光隧道和真实分岔路线',
-    tags: ['分岔', '量子门', '短弯'],
+    tagline: '稳定双路线分岔、量子门和发光隧道',
+    tags: ['稳定分岔', '量子门', '短弯'],
     difficulty: '高',
     style: '操控短弯',
+  },
+  {
+    id: 'crystal_canyon',
+    name: '晶体峡谷',
+    tagline: '暖色晶体峡谷，宽路连续弯适合漂移',
+    tags: ['晶体', '宽弯', '峡谷'],
+    difficulty: '中',
+    style: '宽路漂移',
   },
 ]);
 
@@ -49,6 +57,7 @@ const TRACK_LOADERS = {
   blue_rain: () => import('./Track_BlueRainSkyway.js'),
   aurora: () => import('./Track_AuroraPass.js'),
   quantum: () => import('./Track_QuantumCity.js'),
+  crystal_canyon: () => import('./Track_CrystalCanyon.js'),
 };
 
 export function normalizeTrackId(trackId) {

@@ -82,12 +82,22 @@ export function createRaceIntroState(ctx) {
     dir.position.set(8, 15, 6);
     dir.castShadow = true;
     dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.bias = -0.00018;
+    dir.shadow.normalBias = 0.035;
+    const d = 120;
+    dir.shadow.camera.left = -d;
+    dir.shadow.camera.right = d;
+    dir.shadow.camera.top = d;
+    dir.shadow.camera.bottom = -d;
+    dir.shadow.camera.near = 2;
+    dir.shadow.camera.far = 220;
     scene.add(amb, dir);
 
     const trackModule = ctx.trackModule?.createTrack ? ctx.trackModule : { createTrack: createDefaultTrack };
     trackData = trackModule.createTrack(THREE, {});
     applyTrackSceneTheme();
     scene.add(trackData.root);
+    applyTrackShadowRoles(trackData.root);
 
     // --- 获取车辆信息 ---
     const models = getModels();
@@ -158,6 +168,26 @@ export function createRaceIntroState(ctx) {
     const fog = theme.fog ?? background;
     scene.background = new THREE.Color(background);
     scene.fog = new THREE.Fog(fog, theme.fogNear ?? 20, theme.fogFar ?? 140);
+  }
+
+  function applyTrackShadowRoles(root) {
+    if (!root?.traverse) return;
+    root.traverse((node) => {
+      if (!node?.isMesh && !node?.isInstancedMesh) return;
+      const name = String(node.name || '').toLowerCase();
+      if (name.startsWith('roadchunk_') || name.includes('shoulder')) {
+        node.castShadow = false;
+        node.receiveShadow = true;
+        return;
+      }
+      if (name.includes('coin') || name.includes('nitro')) {
+        node.castShadow = true;
+        node.receiveShadow = false;
+        return;
+      }
+      node.castShadow = true;
+      node.receiveShadow = true;
+    });
   }
 
   return {

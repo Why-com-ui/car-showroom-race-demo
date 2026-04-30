@@ -368,6 +368,17 @@ export function createTrack(THREE_Instance, opts = {}) {
     const dir = new T.DirectionalLight(0xffffff, CONFIG.light.directional);
     dir.position.set(40, 80, 30);
     dir.target.position.set(0, 0, -50);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(1536, 1536);
+    dir.shadow.bias = -0.00018;
+    dir.shadow.normalBias = 0.035;
+    dir.shadow.camera.near = 4;
+    dir.shadow.camera.far = 230;
+    const d = 125;
+    dir.shadow.camera.left = -d;
+    dir.shadow.camera.right = d;
+    dir.shadow.camera.top = d;
+    dir.shadow.camera.bottom = -d;
 
     root.add(amb);
     root.add(hemi);
@@ -437,6 +448,8 @@ vec4 bendViewPos(vec4 viewPos){
   const buildMesh = new T.InstancedMesh(buildGeo, buildMat, CONFIG.maxBuildings);
   buildMesh.frustumCulled = false;
   buildMesh.raycast = () => {};
+  buildMesh.castShadow = true;
+  buildMesh.receiveShadow = true;
   root.add(buildMesh);
   const buildings = new InstanceManager(buildMesh, CONFIG.maxBuildings);
 
@@ -454,6 +467,8 @@ vec4 bendViewPos(vec4 viewPos){
   const archMesh = new T.InstancedMesh(archGeo, archMat, CONFIG.maxArches);
   archMesh.frustumCulled = false;
   archMesh.raycast = () => {};
+  archMesh.castShadow = true;
+  archMesh.receiveShadow = true;
   root.add(archMesh);
   const arches = new InstanceManager(archMesh, CONFIG.maxArches);
 
@@ -471,6 +486,7 @@ vec4 bendViewPos(vec4 viewPos){
   const coinMesh = new T.InstancedMesh(coinGeo, coinMat, CONFIG.maxCoins);
   coinMesh.frustumCulled = false;
   coinMesh.raycast = () => {};
+  coinMesh.castShadow = true;
   root.add(coinMesh);
   const coins = new InstanceManager(coinMesh, CONFIG.maxCoins);
 
@@ -574,6 +590,7 @@ vec4 bendViewPos(vec4 viewPos){
       this.mesh.userData.__chunkRef = this; // 给 raycast 回查 chunk 用
       this.mesh.frustumCulled = false;
       this.mesh.name = 'RoadChunk_' + id;
+      this.mesh.receiveShadow = true;
     }
 
     generate(startPos, startDir) {

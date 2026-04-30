@@ -190,6 +190,7 @@ export function createTrack(THREE_Instance, opts = {}) {
       this.roadMesh.name = `RoadChunk_${this.id}`;
       this.roadMesh.userData.__chunkRef = this;
       this.roadMesh.frustumCulled = false;
+      this.roadMesh.receiveShadow = true;
       this.root.add(this.roadMesh);
       roadMeshes.push(this.roadMesh);
 
@@ -218,6 +219,7 @@ export function createTrack(THREE_Instance, opts = {}) {
       this.shoulderMesh = new T.Mesh(this.shoulderGeo, shoulderMat);
       this.shoulderMesh.name = `FurnaceShoulder_${this.id}`;
       this.shoulderMesh.frustumCulled = false;
+      this.shoulderMesh.receiveShadow = true;
       this.root.add(this.shoulderMesh);
 
       this._addRoadDetails(samples);
@@ -308,6 +310,7 @@ export function createTrack(THREE_Instance, opts = {}) {
         const coin = new T.Mesh(coinGeo, coinMat);
         coin.position.copy(pos);
         coin.name = 'FurnaceCoin';
+        coin.castShadow = true;
         this.root.add(coin);
         interactables.push(makeInteractable('coin', coin, this.id, { active: true, value: 100, radius: 2.5 }));
       }
@@ -320,6 +323,7 @@ export function createTrack(THREE_Instance, opts = {}) {
         pad.name = 'NitroPad';
         orientObject(T, pad, pos, sample.tangent, sample.right, sample.normal);
         pad.userData.phase = rng() * Math.PI * 2;
+        pad.castShadow = true;
         this.root.add(pad);
         interactables.push(makeInteractable('nitro_pad', pad, this.id, { active: true, nitro: 35, value: 0, radius: 4.1 }));
       }
@@ -494,6 +498,17 @@ function addTrackLights(T, root) {
   root.add(hemi);
   const key = new T.DirectionalLight(0xfff3d7, 1.75);
   key.position.set(40, 86, 32);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1536, 1536);
+  key.shadow.bias = -0.00018;
+  key.shadow.normalBias = 0.035;
+  key.shadow.camera.near = 4;
+  key.shadow.camera.far = 230;
+  const d = 130;
+  key.shadow.camera.left = -d;
+  key.shadow.camera.right = d;
+  key.shadow.camera.top = d;
+  key.shadow.camera.bottom = -d;
   root.add(key);
   const furnace = new T.PointLight(0xff8f24, 2.5, 170);
   furnace.position.set(0, 14, -48);
@@ -527,6 +542,9 @@ function addBox(T, parent, geo, mat, scale, pos, tangent, right, normal) {
   const mesh = new T.Mesh(geo, mat);
   mesh.scale.set(scale[0], scale[1], scale[2]);
   orientObject(T, mesh, pos, tangent, right, normal);
+  const [sx = 1, sy = 1, sz = 1] = scale;
+  mesh.castShadow = sy > 2.4 || sx > 4 || sz > 4;
+  mesh.receiveShadow = sx > 1.5 || sz > 1.5 || sy > 2.4;
   parent.add(mesh);
   return mesh;
 }
