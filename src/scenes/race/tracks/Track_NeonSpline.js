@@ -963,10 +963,30 @@ vec4 bendViewPos(vec4 viewPos){
 
   return {
     root,
+    roadWidth: CONFIG.roadWidth,
+    surfaceTuning: {
+      maxSpeed: 1,
+      grip: 0,
+      driftGrip: 0,
+    },
+    tags: ['霓虹', '金币', '经典'],
+    difficulty: '中',
+    style: '均衡高速',
+    theme: {
+      background: 0x03040a,
+      fog: CONFIG.colors.fog,
+      fogDensity: 0.0008,
+      fogNear: 20,
+      fogFar: 260,
+    },
     spawn: {
       position: spawnPt.center.clone().add(new T.Vector3(0, 1.5, 0)),
       yaw: Math.atan2(spawnPt.forward.x, spawnPt.forward.z)
     },
+    checkpoints: activeChunks.flatMap((chunk) => chunk.boundsData.filter((_, index) => index % 5 === 0).map((b) => ({
+      center: b.center.clone(),
+      radius: 7,
+    }))).slice(0, 12),
 
     bounds: {
       fn: (x, z, pos3D) => {

@@ -1,0 +1,76 @@
+import { createProceduralSplineTrack } from './createProceduralSplineTrack.js';
+
+const CONFIG = {
+  id: 'quantum',
+  name: 'QuantumCity',
+  roadWidth: 24,
+  chunkLength: 96,
+  chunkSegments: 38,
+  controlSteps: 5,
+  turnScale: 0.72,
+  turnAmpA: 0.066,
+  turnAmpB: 0.048,
+  turnNoise: 0.006,
+  maxSlope: 0.018,
+  slopeAmp: 0.01,
+  slopeEase: 0.2,
+  minY: -5,
+  maxY: 14,
+  branch: {
+    enabled: true,
+    every: 3,
+    phase: 1,
+    offset: 23,
+    width: 20,
+    start: 0.16,
+    end: 0.88,
+  },
+  tags: ['分岔', '量子门', '短弯'],
+  difficulty: '高',
+  style: '操控短弯',
+  surfaceTuning: {
+    maxSpeed: -2,
+    grip: 0.02,
+    driftGrip: 0.005,
+    turnRate: 0.16,
+    nitroChargeRate: 3,
+  },
+  theme: {
+    background: 0x09051c,
+    fog: 0x1a0d4c,
+    fogDensity: 0.00058,
+    fogNear: 22,
+    fogFar: 300,
+  },
+  colors: {
+    background: 0x09051c,
+    fog: 0x1a0d4c,
+    road: 0x121126,
+    roadEmissive: 0x21136b,
+    shoulder: 0x090817,
+    rail: 0xb65cff,
+    center: 0x39fff2,
+    marker: 0xff4df1,
+    wall: 0x22144f,
+    glass: 0x39fff2,
+    structure: 0x221a58,
+    coin: 0xffe67d,
+    pad: 0x39fff2,
+    particle: 0xb65cff,
+    distant: 0x19153d,
+  },
+  materials: {
+    roadRoughness: 0.26,
+    roadMetalness: 0.56,
+    roadEmissiveIntensity: 0.52,
+  },
+  features: {
+    quantumCity: true,
+    nitroEvery: 2,
+    nitroAmount: 38,
+  },
+};
+
+export function createTrack(THREE, opts = {}) {
+  return createProceduralSplineTrack(THREE, CONFIG, opts);
+}

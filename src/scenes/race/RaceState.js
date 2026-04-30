@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { DEFAULT_CAR_MODELS, STATES } from '../../core/constants.js';
 import { Assets } from '../../core/Assets.js';
+import { deriveRaceTuning } from '../../core/raceTuning.js';
 
 // 默认赛道
 import { createTrack as createDefaultTrack } from './tracks/Track_SimpleRing.js';
@@ -44,6 +45,9 @@ export function createRaceState(ctx) {
   let roadMeshCount = 0;
   let initialResetSnapshot = null;
   let latestDebugSnapshot = null;
+  let selectedCarInfo = null;
+  let selectedCarConfig = null;
+  let playerRaceTuning = null;
 
   const prevKeys = { esc: false, r: false, c: false };
 
@@ -198,6 +202,8 @@ export function createRaceState(ctx) {
     scene.add(carRoot);
 
     const carConfig = s.carConfig || {};
+    selectedCarInfo = carInfo;
+    selectedCarConfig = carConfig;
     applyCarConfig(visualModel, carConfig, realtimeEnvMap);
   }
 
@@ -208,6 +214,8 @@ export function createRaceState(ctx) {
     camera = setup.camera;
     trackData = setup.trackData;
     carRoot = setup.carRoot;
+    selectedCarInfo = setup.carInfo || null;
+    selectedCarConfig = setup.carConfig || store.getState().carConfig || {};
     applyTrackSceneTheme();
     return true;
   }
@@ -250,16 +258,15 @@ export function createRaceState(ctx) {
       // ----------------------------------
       // Init Player Controller
       // ----------------------------------
+      playerRaceTuning = deriveRaceTuning(
+        selectedCarInfo?.stats,
+        selectedCarConfig,
+        trackData?.surfaceTuning,
+      );
       carCtrl = new CarController({
         carRoot,
         trackRoot: trackData.root,
-        tuning: {
-          maxSpeed: 110,
-          accel: 85,
-          turnRate: 3.2,
-          grip: 0.98,
-          driftGrip: 0.94,
-        },
+        tuning: playerRaceTuning,
       });
 
       if (trackData?.spawn) {
@@ -338,6 +345,7 @@ export function createRaceState(ctx) {
         handbrake: false,
         roadMeshCount,
         initialReset: initialResetSnapshot,
+        tuning: playerRaceTuning,
       };
       ctx.setRaceDebugMetricsProvider?.(() => latestDebugSnapshot);
 
@@ -424,6 +432,7 @@ export function createRaceState(ctx) {
             nitro: nitroState,
             roadMeshCount,
             initialReset: initialResetSnapshot,
+            tuning: playerRaceTuning,
           };
         },
       });

@@ -1,4 +1,5 @@
 import { DEFAULT_TRACK_ID, RACE_TRACKS, normalizeTrackId } from '../scenes/race/tracks/trackRegistry.js';
+import { deriveCarProfile } from '../core/raceTuning.js';
 
 const PAINT_PRESETS = [
   { name: 'Redline', color: '#ff2a2a' },
@@ -68,6 +69,7 @@ export class ShowroomUI {
     this._venueMode = 'storm';
     this._trackId = DEFAULT_TRACK_ID;
     this._trackPickerVisible = false;
+    this._carStats = { speed: 0, handling: 0, accel: 0 };
     this._tuningState = {
       metalness: 0.7,
       roughness: 0.25,
@@ -110,6 +112,10 @@ export class ShowroomUI {
             <div class="ui-progress-bg">
               <div class="ui-progress-fill ui-progress-fill--accel" data-bind="stat-accel"></div>
             </div>
+          </div>
+          <div class="ui-profile-row">
+            <span class="ui-profile-label">风格</span>
+            <span class="ui-profile-badge" data-bind="car-profile">均衡型</span>
           </div>
         </section>
 
@@ -219,8 +225,15 @@ export class ShowroomUI {
           <div class="ui-track-options">
             ${RACE_TRACKS.map((track) => `
               <button class="ui-track-option" data-action="track-select" data-track-id="${track.id}" aria-pressed="false">
-                <span class="ui-track-option-name">${track.name}</span>
+                <span class="ui-track-option-top">
+                  <span class="ui-track-option-name">${track.name}</span>
+                  <span class="ui-track-difficulty">${track.difficulty || '中'}</span>
+                </span>
                 <span class="ui-track-option-tagline">${track.tagline}</span>
+                <span class="ui-track-option-meta">
+                  <span>${track.style || '高速'}</span>
+                  ${(track.tags || []).map((tag) => `<span>${tag}</span>`).join('')}
+                </span>
               </button>
             `).join('')}
           </div>
@@ -239,6 +252,7 @@ export class ShowroomUI {
     this.$statSpeedVal = this.root.querySelector('[data-bind="stat-speed-val"]');
     this.$statHandlingVal = this.root.querySelector('[data-bind="stat-handling-val"]');
     this.$statAccelVal = this.root.querySelector('[data-bind="stat-accel-val"]');
+    this.$carProfile = this.root.querySelector('[data-bind="car-profile"]');
     this.$paintButtons = [...this.root.querySelectorAll('.ui-paint-swatch')];
     this.$cameraButtons = [...this.root.querySelectorAll('.ui-camera-mode')];
     this.$venueButtons = [...this.root.querySelectorAll('.ui-venue-mode')];
@@ -373,6 +387,7 @@ export class ShowroomUI {
     const speed = stats.speed ?? 0;
     const handling = stats.handling ?? 0;
     const accel = stats.accel ?? 0;
+    this._carStats = { speed, handling, accel };
 
     if (this.$statSpeed) this.$statSpeed.style.width = `${speed}%`;
     if (this.$statHandling) this.$statHandling.style.width = `${handling}%`;
@@ -381,6 +396,7 @@ export class ShowroomUI {
     if (this.$statSpeedVal) this.$statSpeedVal.textContent = speed;
     if (this.$statHandlingVal) this.$statHandlingVal.textContent = handling;
     if (this.$statAccelVal) this.$statAccelVal.textContent = accel;
+    this._syncProfileBadge();
   }
 
   syncCarConfig(cfg = {}) {
@@ -473,6 +489,7 @@ export class ShowroomUI {
     }
 
     this._syncTuneLabels();
+    this._syncProfileBadge();
   }
 
   openTrackPicker() {
@@ -515,6 +532,7 @@ export class ShowroomUI {
 
     this._tuningState = { ...this._tuningState, [key]: value };
     this._syncTuneLabels();
+    this._syncProfileBadge();
     this.onTuneChange?.({ [key]: value });
   }
 
@@ -523,6 +541,11 @@ export class ShowroomUI {
       if (!label) continue;
       label.textContent = String(Math.round(clamp01(this._tuningState[key]) * 100));
     }
+  }
+
+  _syncProfileBadge() {
+    if (!this.$carProfile) return;
+    this.$carProfile.textContent = deriveCarProfile(this._carStats, this._tuningState);
   }
 
   _togglePanels() {

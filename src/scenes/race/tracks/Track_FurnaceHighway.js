@@ -420,6 +420,14 @@ export function createTrack(THREE_Instance, opts = {}) {
   return {
     root,
     roadWidth: CONFIG.roadWidth,
+    surfaceTuning: {
+      grip: 0.01,
+      driftGrip: -0.025,
+      nitroChargeRate: 6,
+    },
+    tags: ['工业', '宽弯', 'N2O'],
+    difficulty: '中',
+    style: '漂移补给',
     theme: {
       background: 0x4c2f22,
       fog: CONFIG.colors.fog,
