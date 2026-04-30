@@ -228,8 +228,10 @@ export class Input {
   }
 
   _normalizeCode(event) {
+    const keyCode = event?.key ? KEY_TO_CODE[event.key] : null;
+    if (keyCode && this._reservedKeys.has(keyCode)) return keyCode;
     if (event?.code && event.code !== 'Unidentified') return event.code;
-    if (event?.key && KEY_TO_CODE[event.key]) return KEY_TO_CODE[event.key];
+    if (keyCode) return keyCode;
     return null;
   }
 
