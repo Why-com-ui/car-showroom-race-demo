@@ -177,6 +177,7 @@ export function createRaceState(ctx) {
     // 赛道
     const trackModule = ctx.trackModule?.createTrack ? ctx.trackModule : { createTrack: createDefaultTrack };
     trackData = trackModule.createTrack(THREE, { seed: Math.random() * 1000 });
+    applyTrackSceneTheme();
     scene.add(trackData.root);
 
     // 玩家车辆
@@ -207,6 +208,7 @@ export function createRaceState(ctx) {
     camera = setup.camera;
     trackData = setup.trackData;
     carRoot = setup.carRoot;
+    applyTrackSceneTheme();
     return true;
   }
 
@@ -219,6 +221,15 @@ export function createRaceState(ctx) {
       }
     });
     return count;
+  }
+
+  function applyTrackSceneTheme() {
+    const theme = trackData?.theme;
+    if (!theme || !scene) return;
+    const background = theme.background ?? theme.fog ?? 0x020205;
+    const fog = theme.fog ?? background;
+    scene.background = new THREE.Color(background);
+    scene.fog = new THREE.FogExp2(fog, theme.fogDensity ?? 0.001);
   }
 
   return {

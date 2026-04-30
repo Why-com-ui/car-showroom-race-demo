@@ -1,24 +1,25 @@
 import * as THREE from 'three';
 
 const CONFIG = {
-  chunkLength: 72,
-  chunkSegments: 30,
-  roadWidth: 22,
-  visibleChunks: 12,
-  recycleDist: 72,
-  turnScale: 0.92,
-  maxSlope: 0.18,
+  chunkLength: 96,
+  chunkSegments: 40,
+  roadWidth: 28,
+  visibleChunks: 10,
+  recycleDist: 96,
+  turnScale: 0.62,
+  maxSlope: 0.045,
   colors: {
-    fog: 0x130704,
-    road: 0x160807,
-    roadEmissive: 0x3a1207,
-    edge: 0xff7a1a,
-    center: 0xffd166,
-    hazard: 0xff3300,
-    metal: 0x120d0b,
-    wall: 0x241008,
-    coin: 0xffd166,
-    pad: 0xff7a1a,
+    fog: 0x6a3c22,
+    road: 0x4a2d22,
+    roadEmissive: 0x6f341c,
+    shoulder: 0x2d211b,
+    edge: 0xffa12b,
+    center: 0xffdf8a,
+    hazard: 0xff5a1f,
+    metal: 0x46362e,
+    wall: 0x56351f,
+    coin: 0xffe39b,
+    pad: 0xff9c29,
   },
 };
 
@@ -43,28 +44,36 @@ export function createTrack(THREE_Instance, opts = {}) {
 
   const roadMat = new T.MeshStandardMaterial({
     color: CONFIG.colors.road,
-    roughness: 0.42,
-    metalness: 0.38,
+    roughness: 0.48,
+    metalness: 0.32,
     emissive: CONFIG.colors.roadEmissive,
-    emissiveIntensity: 0.72,
+    emissiveIntensity: 0.5,
     side: T.DoubleSide,
   });
-  const railMat = makeGlowMaterial(T, CONFIG.colors.edge, 1.25);
-  const centerMat = makeGlowMaterial(T, CONFIG.colors.center, 0.95);
-  const hazardMat = makeGlowMaterial(T, CONFIG.colors.hazard, 1.15);
+  const shoulderMat = new T.MeshStandardMaterial({
+    color: CONFIG.colors.shoulder,
+    roughness: 0.66,
+    metalness: 0.26,
+    emissive: 0x3c1d10,
+    emissiveIntensity: 0.26,
+    side: T.DoubleSide,
+  });
+  const railMat = makeGlowMaterial(T, CONFIG.colors.edge, 0.95);
+  const centerMat = makeGlowMaterial(T, CONFIG.colors.center, 0.78);
+  const hazardMat = makeGlowMaterial(T, CONFIG.colors.hazard, 0.88);
   const metalMat = new T.MeshStandardMaterial({
     color: CONFIG.colors.metal,
-    roughness: 0.5,
-    metalness: 0.78,
-    emissive: 0x1a0502,
-    emissiveIntensity: 0.35,
+    roughness: 0.56,
+    metalness: 0.64,
+    emissive: 0x33130a,
+    emissiveIntensity: 0.22,
   });
   const wallMat = new T.MeshStandardMaterial({
     color: CONFIG.colors.wall,
-    roughness: 0.58,
-    metalness: 0.42,
-    emissive: 0x2c0a04,
-    emissiveIntensity: 0.38,
+    roughness: 0.62,
+    metalness: 0.34,
+    emissive: 0x3a1608,
+    emissiveIntensity: 0.24,
   });
   const coinMat = new T.MeshStandardMaterial({
     color: CONFIG.colors.coin,
@@ -101,6 +110,8 @@ export function createTrack(THREE_Instance, opts = {}) {
       this.endDist = 0;
       this.roadGeo = null;
       this.roadMesh = null;
+      this.shoulderGeo = null;
+      this.shoulderMesh = null;
     }
 
     generate(startPos, startDir) {
@@ -108,19 +119,20 @@ export function createTrack(THREE_Instance, opts = {}) {
       const points = [startPos.clone()];
       let currPos = startPos.clone();
       let currDir = startDir.clone();
-      const step = CONFIG.chunkLength / 4;
+      const step = CONFIG.chunkLength / 5;
 
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 5; i++) {
         totalDist += step;
-        const sBend = Math.sin(totalDist * 0.035) * 0.26;
-        const heavyBend = Math.sin(totalDist * 0.012 + 1.4) * 0.18;
-        const wobble = (rng() - 0.5) * 0.06;
+        const sBend = Math.sin(totalDist * 0.02) * 0.055;
+        const heavyBend = Math.sin(totalDist * 0.007 + 1.4) * 0.035;
+        const wobble = (rng() - 0.5) * 0.012;
         currDir.applyAxisAngle(worldUp, (sBend + heavyBend + wobble) * CONFIG.turnScale);
-        currDir.y += Math.sin(totalDist * 0.018) * 0.025;
+        const targetPitch = Math.sin(totalDist * 0.006 + this.id * 0.35) * 0.025;
+        currDir.y += (targetPitch - currDir.y) * 0.28;
         currDir.y = clamp(currDir.y, -CONFIG.maxSlope, CONFIG.maxSlope);
         currDir.normalize();
-        if (currPos.y > 32) currDir.y -= 0.045;
-        if (currPos.y < -10) currDir.y += 0.045;
+        if (currPos.y > 18) currDir.y -= 0.02;
+        if (currPos.y < -4) currDir.y += 0.02;
         currPos.addScaledVector(currDir, step);
         points.push(currPos.clone());
       }
@@ -130,8 +142,7 @@ export function createTrack(THREE_Instance, opts = {}) {
       cursor.pos.copy(currPos);
       cursor.dir.copy(currDir);
 
-      const curve = new T.CatmullRomCurve3(points);
-      curve.tension = 0.48;
+      const curve = new T.CatmullRomCurve3(points, false, 'centripetal', 0.18);
       const samples = [];
       const count = CONFIG.chunkSegments + 1;
       const positions = new Float32Array(count * 2 * 3);
@@ -182,6 +193,33 @@ export function createTrack(THREE_Instance, opts = {}) {
       this.root.add(this.roadMesh);
       roadMeshes.push(this.roadMesh);
 
+      const shoulderHalf = half + 5.2;
+      const shoulderPositions = new Float32Array(count * 2 * 3);
+      const shoulderUvs = new Float32Array(count * 2 * 2);
+      for (let i = 0; i < samples.length; i++) {
+        const sample = samples[i];
+        const left = sample.center.clone()
+          .addScaledVector(sample.right, shoulderHalf)
+          .addScaledVector(sample.normal, -0.04);
+        const rightEdge = sample.center.clone()
+          .addScaledVector(sample.right, -shoulderHalf)
+          .addScaledVector(sample.normal, -0.04);
+        shoulderPositions.set([left.x, left.y, left.z], i * 6);
+        shoulderPositions.set([rightEdge.x, rightEdge.y, rightEdge.z], i * 6 + 3);
+        shoulderUvs.set([0, i], i * 4);
+        shoulderUvs.set([1, i], i * 4 + 2);
+      }
+      this.shoulderGeo = new T.BufferGeometry();
+      this.shoulderGeo.setAttribute('position', new T.BufferAttribute(shoulderPositions, 3));
+      this.shoulderGeo.setAttribute('uv', new T.BufferAttribute(shoulderUvs, 2));
+      this.shoulderGeo.setIndex(indices);
+      this.shoulderGeo.computeVertexNormals();
+      this.shoulderGeo.computeBoundingSphere();
+      this.shoulderMesh = new T.Mesh(this.shoulderGeo, shoulderMat);
+      this.shoulderMesh.name = `FurnaceShoulder_${this.id}`;
+      this.shoulderMesh.frustumCulled = false;
+      this.root.add(this.shoulderMesh);
+
       this._addRoadDetails(samples);
       this._addFactorySet(samples);
       this._addCollectibles(samples);
@@ -204,7 +242,7 @@ export function createTrack(THREE_Instance, opts = {}) {
         }
       }
 
-      for (let i = 5; i < samples.length; i += 8) {
+      for (let i = 6; i < samples.length; i += 10) {
         const sample = samples[i];
         const side = Math.sin(sample.s * 0.045) > 0 ? 1 : -1;
         for (let k = 0; k < 3; k++) {
@@ -219,11 +257,11 @@ export function createTrack(THREE_Instance, opts = {}) {
     }
 
     _addFactorySet(samples) {
-      for (let i = 3; i < samples.length; i += 5) {
+      for (let i = 4; i < samples.length; i += 8) {
         const sample = samples[i];
         const side = (i + this.id) % 2 === 0 ? 1 : -1;
-        const offset = CONFIG.roadWidth / 2 + 18 + rng() * 10;
-        const height = 16 + rng() * 36;
+        const offset = CONFIG.roadWidth / 2 + 42 + rng() * 24;
+        const height = 8 + rng() * 18;
         const width = 8 + rng() * 10;
         const depth = 8 + rng() * 12;
         const base = sample.center.clone().addScaledVector(sample.right, side * offset);
@@ -249,15 +287,17 @@ export function createTrack(THREE_Instance, opts = {}) {
         }
       }
 
-      const gateSample = samples[samples.length - 1];
-      const gateCenter = gateSample.center.clone().addScaledVector(gateSample.normal, 0.2);
-      for (const side of [-1, 1]) {
-        const pillarPos = gateCenter.clone().addScaledVector(gateSample.right, side * (CONFIG.roadWidth / 2 + 1.2)).addScaledVector(worldUp, 6.2);
-        addBox(T, this.root, boxGeo, wallMat, [1.2, 12.4, 1.2], pillarPos, gateSample.tangent, gateSample.right, worldUp);
-        addBox(T, this.root, boxGeo, hazardMat, [0.28, 10.4, 0.28], pillarPos, gateSample.tangent, gateSample.right, worldUp);
+      if (this.id % 2 === 0) {
+        const gateSample = samples[samples.length - 1];
+        const gateCenter = gateSample.center.clone().addScaledVector(gateSample.normal, 0.2);
+        for (const side of [-1, 1]) {
+          const pillarPos = gateCenter.clone().addScaledVector(gateSample.right, side * (CONFIG.roadWidth / 2 + 5.5)).addScaledVector(worldUp, 5.4);
+          addBox(T, this.root, boxGeo, wallMat, [1.1, 10.8, 1.1], pillarPos, gateSample.tangent, gateSample.right, worldUp);
+          addBox(T, this.root, boxGeo, hazardMat, [0.22, 8.6, 0.22], pillarPos, gateSample.tangent, gateSample.right, worldUp);
+        }
+        addBox(T, this.root, boxGeo, hazardMat, [CONFIG.roadWidth + 8.4, 0.38, 1.0], gateCenter.clone().addScaledVector(worldUp, 10.6), gateSample.tangent, gateSample.right, worldUp);
+        addBox(T, this.root, boxGeo, centerMat, [CONFIG.roadWidth + 6.2, 0.14, 0.62], gateCenter.clone().addScaledVector(worldUp, 9.3), gateSample.tangent, gateSample.right, worldUp);
       }
-      addBox(T, this.root, boxGeo, hazardMat, [CONFIG.roadWidth + 5.0, 0.45, 1.1], gateCenter.clone().addScaledVector(worldUp, 12.2), gateSample.tangent, gateSample.right, worldUp);
-      addBox(T, this.root, boxGeo, centerMat, [CONFIG.roadWidth + 3.0, 0.18, 0.7], gateCenter.clone().addScaledVector(worldUp, 10.7), gateSample.tangent, gateSample.right, worldUp);
     }
 
     _addCollectibles(samples) {
@@ -287,6 +327,7 @@ export function createTrack(THREE_Instance, opts = {}) {
 
     dispose() {
       this.roadGeo?.dispose?.();
+      this.shoulderGeo?.dispose?.();
       root.remove(this.root);
       const roadIndex = roadMeshes.indexOf(this.roadMesh);
       if (roadIndex >= 0) roadMeshes.splice(roadIndex, 1);
@@ -371,12 +412,21 @@ export function createTrack(THREE_Instance, opts = {}) {
       lateral,
       along,
       s: best.s + clamp(along, -8, 8),
+      roadWidth: CONFIG.roadWidth,
       valid: true,
     };
   }
 
   return {
     root,
+    roadWidth: CONFIG.roadWidth,
+    theme: {
+      background: 0x4c2f22,
+      fog: CONFIG.colors.fog,
+      fogDensity: 0.00028,
+      fogNear: 28,
+      fogFar: 300,
+    },
     spawn: {
       position: spawnSample.center.clone().add(new T.Vector3(0, 1.5, 0)),
       yaw: Math.atan2(spawnSample.forward.x, spawnSample.forward.z),
@@ -431,32 +481,32 @@ function makeGlowMaterial(T, color, intensity = 1) {
 }
 
 function addTrackLights(T, root) {
-  root.add(new T.AmbientLight(0xffd8bd, 0.42));
-  const hemi = new T.HemisphereLight(0xff9f1c, 0x160704, 0.78);
+  root.add(new T.AmbientLight(0xffead2, 0.82));
+  const hemi = new T.HemisphereLight(0xffc16b, 0x3a2115, 1.24);
   root.add(hemi);
-  const key = new T.DirectionalLight(0xfff0d2, 1.35);
-  key.position.set(30, 70, 24);
+  const key = new T.DirectionalLight(0xfff3d7, 1.75);
+  key.position.set(40, 86, 32);
   root.add(key);
-  const furnace = new T.PointLight(0xff5a00, 3.0, 120);
-  furnace.position.set(0, 12, -35);
+  const furnace = new T.PointLight(0xff8f24, 2.5, 170);
+  furnace.position.set(0, 14, -48);
   root.add(furnace);
 }
 
 function addFurnaceHaze(T, root, rng) {
   const geo = new T.BufferGeometry();
-  const count = 420;
+  const count = 260;
   const positions = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    positions[i * 3] = (rng() - 0.5) * 160;
-    positions[i * 3 + 1] = 1 + rng() * 34;
-    positions[i * 3 + 2] = -rng() * 260;
+    positions[i * 3] = (rng() - 0.5) * 220;
+    positions[i * 3 + 1] = 3 + rng() * 42;
+    positions[i * 3 + 2] = -rng() * 340;
   }
   geo.setAttribute('position', new T.BufferAttribute(positions, 3));
   const mat = new T.PointsMaterial({
-    color: 0xff7a1a,
-    size: 0.42,
+    color: 0xffb15a,
+    size: 0.36,
     transparent: true,
-    opacity: 0.38,
+    opacity: 0.24,
     depthWrite: false,
     blending: T.AdditiveBlending,
   });

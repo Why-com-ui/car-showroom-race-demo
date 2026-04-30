@@ -260,8 +260,8 @@ export class AIController extends CarController {
     }
 
     // --- 7. 边缘救车 (Safety Net) ---
-    const roadHalfWidth = 18 / 2; 
-    const margin = 2.5;
+    const roadHalfWidth = (currentTrackPos.roadWidth ?? this.trackData?.roadWidth ?? 18) / 2;
+    const margin = Math.min(3.5, roadHalfWidth * 0.28);
     if (Math.abs(currentTrackPos.lateral) > roadHalfWidth - margin) {
       const rescueDir = currentTrackPos.lateral > 0 ? -1 : 1;
       steerOutput = rescueDir * 1.0;

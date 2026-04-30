@@ -86,6 +86,7 @@ export function createRaceIntroState(ctx) {
 
     const trackModule = ctx.trackModule?.createTrack ? ctx.trackModule : { createTrack: createDefaultTrack };
     trackData = trackModule.createTrack(THREE, {});
+    applyTrackSceneTheme();
     scene.add(trackData.root);
 
     // --- 获取车辆信息 ---
@@ -148,6 +149,15 @@ export function createRaceIntroState(ctx) {
       carInfo,
       carConfig: getCarConfig(),
     };
+  }
+
+  function applyTrackSceneTheme() {
+    const theme = trackData?.theme;
+    if (!theme || !scene) return;
+    const background = theme.background ?? theme.fog ?? 0x03040a;
+    const fog = theme.fog ?? background;
+    scene.background = new THREE.Color(background);
+    scene.fog = new THREE.Fog(fog, theme.fogNear ?? 20, theme.fogFar ?? 140);
   }
 
   return {
