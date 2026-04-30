@@ -196,19 +196,23 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
       const side = Number.isFinite(branch.side) ? Math.sign(branch.side || 1) : (this.id % 2 === 0 ? 1 : -1);
       const offset = branch.offset ?? cfg.roadWidth * 0.92;
       const branchWidth = branch.width ?? cfg.roadWidth * 0.82;
-      const branchBaseLift = branch.baseLift ?? 0.06;
+      const branchBaseLift = branch.baseLift ?? 0;
       const branchLift = branch.lift ?? 0.16;
-      const branchSamples = samples.map((sample) => {
+      const branchSamples = samples.map((sample, index) => {
         const alpha = branchAlpha(sample.t, branch.start ?? 0.18, branch.end ?? 0.84);
         const center = sample.center.clone()
           .addScaledVector(sample.right, side * offset * alpha)
-          .addScaledVector(sample.normal, branchBaseLift + branchLift * alpha);
-        return { ...sample, center, route: 'branch', roadWidth: branchWidth, branchAlpha: alpha };
+          .addScaledVector(sample.normal, alpha > 0 ? branchBaseLift + branchLift * alpha : 0);
+        return { ...sample, center, route: 'branch', roadWidth: branchWidth, branchAlpha: alpha, sourceIndex: index };
       });
+      const renderMinAlpha = branch.renderMinAlpha
+        ?? clamp(branchWidth * 0.52 / Math.max(Math.abs(offset), 1), 0.16, 0.52);
+      const branchRoadSamples = branchSamples.filter((sample) => (sample.branchAlpha ?? 0) >= renderMinAlpha);
+      if (branchRoadSamples.length < 2) return null;
 
       const branchRoad = makeRibbonMesh(
         T,
-        branchSamples,
+        branchRoadSamples,
         branchWidth / 2,
         materials.branchRoad || materials.road,
         `RoadChunk_${cfg.id}_branch_${this.id}`,
@@ -223,16 +227,16 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
       roadMeshes.push(branchRoad);
       this.geometries.push(branchRoad.geometry);
 
-      for (let i = 0; i < branchSamples.length; i += 2) {
-        if ((branchSamples[i].branchAlpha ?? 0) < (branch.boundsMinAlpha ?? 0.025)) continue;
-        const data = makeBoundsSample(branchSamples[i], branchWidth, 'branch', this.id);
+      for (let i = 0; i < branchRoadSamples.length; i += 2) {
+        if ((branchRoadSamples[i].branchAlpha ?? 0) < (branch.boundsMinAlpha ?? renderMinAlpha)) continue;
+        const data = makeBoundsSample(branchRoadSamples[i], branchWidth, 'branch', this.id);
         this.boundsData.push(data);
         branchRoad.userData.__boundsSamples.push(data);
       }
 
-      this._addBranchJunctions(samples, branchSamples, side, offset, branchWidth);
-      this._addBranchMarkers(branchSamples, side);
-      return branchSamples;
+      this._addBranchJunctions(samples, branchRoadSamples, side, offset, branchWidth);
+      this._addBranchMarkers(branchRoadSamples, side);
+      return branchRoadSamples;
     }
 
     _addBranchJunctions(samples, branchSamples, side, offset, branchWidth) {
@@ -247,15 +251,13 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
           .addScaledVector(main.normal, 0.08);
         const plateWidth = cfg.roadWidth + branchWidth * 0.45 + Math.abs(offset) * alpha;
         const plate = addBox(T, this.root, geometries.box, materials.road, [plateWidth, 0.12, 7.8], pos, main.tangent, main.right, main.normal);
-        plate.name = `RoadChunk_${cfg.id}_junction_${this.id}_${pair.kind}`;
+        plate.name = `Junction_${cfg.id}_${this.id}_${pair.kind}`;
         plate.userData.__chunkRef = this;
         plate.userData.__boundsSamples = [
           makeBoundsSample(main, cfg.roadWidth, 'main', this.id),
           makeBoundsSample(branchSample, branchWidth, 'branch', this.id),
         ];
         applyShadowRole(plate, 'road');
-        roadMeshes.push(plate);
-        this.roadMeshes.push(plate);
       }
     }
 
@@ -517,14 +519,14 @@ function makeRibbonMesh(T, samples, halfWidth, mat, name, normalOffset = 0) {
 }
 
 function findBranchJunctionSample(samples, branchSamples, first = true) {
-  const threshold = 0.08;
+  const threshold = branchSamples[0]?.branchAlpha ?? 0.08;
   const order = first
     ? branchSamples.map((sample, index) => [sample, index])
     : branchSamples.map((sample, index) => [sample, index]).reverse();
-  const found = order.find(([sample]) => (sample.branchAlpha ?? 0) > threshold);
+  const found = order.find(([sample]) => (sample.branchAlpha ?? 0) >= threshold);
   if (!found) return null;
   const [branchSample, index] = found;
-  const main = samples[index];
+  const main = samples[branchSample.sourceIndex ?? index];
   if (!main) return null;
   return {
     main,

@@ -399,7 +399,7 @@ export function createRaceState(ctx) {
             const respawn = (trackData.getRespawn?.(carCtrl.state.pos) || trackData.spawn);
             carCtrl.reset(respawn.position, respawn.yaw);
           }
-          carCtrl.applyToObject3D();
+          carCtrl.applyToObject3D(dt);
 
           // 3. AI 逻辑更新
           if (aiCtrl && carCtrl) {

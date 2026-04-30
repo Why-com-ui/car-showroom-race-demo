@@ -274,7 +274,7 @@ export class AIController extends CarController {
       handbrake: false
     });
     
-    this.applyToObject3D();
+    this.applyToObject3D(dt);
   }
 
   // 物理碰撞处理

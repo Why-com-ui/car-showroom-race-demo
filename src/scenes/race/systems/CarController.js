@@ -41,6 +41,8 @@ export class CarController {
     this._baseQuat = new THREE.Quaternion();
     this._alignQuat = new THREE.Quaternion();
     this._normalMatrix = new THREE.Matrix3();
+    this._targetGroundNormal = new THREE.Vector3(0, 1, 0);
+    this._lastStepDt = 1 / 60;
 
     // ★★★ 核心升级：缓存粒子光晕贴图 ★★★
     this._particleTexture = this._createParticleTexture();
@@ -69,6 +71,8 @@ export class CarController {
       groundSnap: 8.0,    // 地面吸附距离
       rayStartHeight: 10.0, // 射线发射高度
       
+      groundSnapResponse: 28,
+      groundNormalResponse: 18,
       gripResponse: 15,
       alignResponse: 10,
       airDrag: 0.15,      // 空气阻力减小 (飞跃时更远)
@@ -204,7 +208,7 @@ export class CarController {
     }
 
     // 立即做一次贴地，避免出生悬空
-    this._handleRaycastGroundSnap();
+    this._handleRaycastGroundSnap(true);
 
     if (this.tuning.debug) {
       console.log('🚗 车辆重置:', {
@@ -318,6 +322,7 @@ export class CarController {
     state.pos.y += state.velocity.y * dt;
 
     // --- 5. 贴地检测 ---
+    this._lastStepDt = dt;
     this._handleRaycastGroundSnap();
 
     // --- 6. 更新特效 ---
@@ -370,7 +375,7 @@ export class CarController {
   // 贴地检测 (Ground Snap)
   // =========================
 
-  _handleRaycastGroundSnap() {
+  _handleRaycastGroundSnap(immediate = false) {
     const { tuning, state } = this;
 
     // 射线起点：车顶上方
@@ -397,19 +402,34 @@ export class CarController {
       const chassisToGround = hit.distance - tuning.rayStartHeight;
 
       if (chassisToGround <= tuning.groundSnap) {
+        const wasOnGround = state.onGround;
         state.onGround = true;
 
         // 强行贴地：设置 Y 坐标
-        state.pos.y = hit.point.y + tuning.rideHeight;
+        const dt = clamp(this._lastStepDt ?? (1 / 60), 0, tuning.maxDt);
+        const targetY = hit.point.y + tuning.rideHeight;
+        const snapT = 1 - Math.exp(-(tuning.groundSnapResponse ?? 28) * dt);
+        const jump = Math.abs(targetY - state.pos.y);
+        if (immediate || !wasOnGround || jump > tuning.groundSnap * 0.65) {
+          state.pos.y = targetY;
+        } else {
+          state.pos.y = lerp(state.pos.y, targetY, snapT);
+        }
         state.velocity.y = 0;
 
         // 获取法线
         const faceNormal = hit.face?.normal;
         if (faceNormal) {
           this._normalMatrix.getNormalMatrix(hit.object.matrixWorld);
-          state.groundNormal.copy(faceNormal).applyMatrix3(this._normalMatrix).normalize();
+          this._targetGroundNormal.copy(faceNormal).applyMatrix3(this._normalMatrix).normalize();
         } else {
-          state.groundNormal.copy(this._up);
+          this._targetGroundNormal.copy(this._up);
+        }
+        if (immediate || !wasOnGround) {
+          state.groundNormal.copy(this._targetGroundNormal);
+        } else {
+          const normalT = 1 - Math.exp(-(tuning.groundNormalResponse ?? 18) * dt);
+          state.groundNormal.lerp(this._targetGroundNormal, normalT).normalize();
         }
         return;
       }
