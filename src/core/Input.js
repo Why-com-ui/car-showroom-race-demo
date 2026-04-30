@@ -191,18 +191,6 @@ export class Input {
   }
 
   axis2D() {
-    if (this._gameplaySessionActive) {
-      const up = this._isGameplayKeyDown('KeyW') || this._isGameplayKeyDown('ArrowUp');
-      const down = this._isGameplayKeyDown('KeyS') || this._isGameplayKeyDown('ArrowDown');
-      const left = this._isGameplayKeyDown('KeyA') || this._isGameplayKeyDown('ArrowLeft');
-      const right = this._isGameplayKeyDown('KeyD') || this._isGameplayKeyDown('ArrowRight');
-
-      return {
-        throttle: (up ? 1 : 0) + (down ? -1 : 0),
-        steer: (right ? 1 : 0) + (left ? -1 : 0),
-      };
-    }
-
     const up = this.down('KeyW') || this.down('ArrowUp');
     const down = this.down('KeyS') || this.down('ArrowDown');
     const left = this.down('KeyA') || this.down('ArrowLeft');
