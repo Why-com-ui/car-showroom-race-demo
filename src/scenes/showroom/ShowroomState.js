@@ -255,6 +255,20 @@ export function createShowroomState(ctx) {
       ui?.syncCarConfig?.(carConfigRef);
     },
 
+    applyTunePatch(patch = {}) {
+      if (!patch || typeof patch !== 'object') return;
+      const cfg = normalizeCarConfig({ ...(carConfigRef || ensureCarConfig()), ...patch });
+      if (carConfigRef) Object.assign(carConfigRef, cfg);
+      else carConfigRef = cfg;
+
+      store.setState({ carConfig: { ...cfg } });
+      if (carRoot && customizer) {
+        customizer.applyConfig(carRoot, carConfigRef);
+        customizer.updateGUI?.();
+      }
+      ui?.syncCarConfig?.(carConfigRef);
+    },
+
     setAutoRotate(active) {
       autoRotateActive = !!active;
       showroom?.setAutoRotate?.(autoRotateActive);

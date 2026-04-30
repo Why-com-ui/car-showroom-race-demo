@@ -14,7 +14,7 @@ export class ScoreSystem {
     this.lastPos = null;
   }
 
-  update(dt, carPos) {
+  update(dt, carPos, carController = null) {
     // 1. 初始化上一帧位置 (如果是第一帧)
     if (!this.lastPos) {
       this.lastPos = carPos.clone();
@@ -45,7 +45,10 @@ export class ScoreSystem {
         if (item.userData.active) {
           const d = carPos.distanceTo(item.position);
           
-          if (d < this.collectRadius) {
+          const type = item.type || 'coin';
+          const collectRadius = item.userData.radius ?? (type === 'nitro_pad' ? 3.6 : this.collectRadius);
+
+          if (d < collectRadius) {
             // ★ 吃掉逻辑！
             
             // A. 如果是高性能 Instanced 对象 (Track_NeonSpline)，调用专用 hide 方法
@@ -60,8 +63,13 @@ export class ScoreSystem {
             // 标记逻辑状态为已消耗
             item.userData.active = false;
             
-            // 加分 (金币分值通常较大，比如 100)
-            this.score += item.userData.value || 100;
+            if (type === 'nitro_pad') {
+              carController?.addNitro?.(item.userData.nitro ?? 35);
+              this.score += item.userData.value ?? 0;
+            } else {
+              // 加分 (金币分值通常较大，比如 100)
+              this.score += item.userData.value || 100;
+            }
             
             // console.log("Coin collected! Score:", Math.floor(this.score));
           }
@@ -72,6 +80,10 @@ export class ScoreSystem {
       items.forEach(item => {
         // 只旋转还活跃的金币
         if (item.userData.active) {
+          if (item.type === 'nitro_pad') {
+            if (item.updateVisual) item.updateVisual(dt);
+            return;
+          }
            item.rotation.y += dt * 3;
            
            // ★ 关键适配：如果是 InstancedMesh，必须手动触发矩阵更新

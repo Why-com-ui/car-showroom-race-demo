@@ -370,7 +370,7 @@ export function createRaceState(ctx) {
           }
 
           // 5. 其他系统
-          scoreSys.update(dt, carCtrl.state.pos);
+          scoreSys.update(dt, carCtrl.state.pos, carCtrl);
           const forward = carCtrl.getForward();
           
           camRig.update(dt, { forward, speed: carCtrl.state.speed });

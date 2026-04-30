@@ -1,3 +1,5 @@
+import { DEFAULT_TRACK_ID, RACE_TRACKS, normalizeTrackId } from '../scenes/race/tracks/trackRegistry.js';
+
 const PAINT_PRESETS = [
   { name: 'Redline', color: '#ff2a2a' },
   { name: 'Lava Orange', color: '#ff7a1a' },
@@ -42,6 +44,7 @@ export class ShowroomUI {
     onToggleStageFx,
     onToggleVenueScene,
     onVenueChange,
+    onTuneChange,
   } = {}) {
     this.onBackToMenu = onBackToMenu;
     this.onPrevCar = onPrevCar;
@@ -53,6 +56,7 @@ export class ShowroomUI {
     this.onToggleStageFx = onToggleStageFx;
     this.onToggleVenueScene = onToggleVenueScene;
     this.onVenueChange = onVenueChange;
+    this.onTuneChange = onTuneChange;
 
     this._visible = false;
     this._advancedVisible = false;
@@ -62,6 +66,14 @@ export class ShowroomUI {
     this._venueSceneVisible = true;
     this._panelsVisible = true;
     this._venueMode = 'storm';
+    this._trackId = DEFAULT_TRACK_ID;
+    this._trackPickerVisible = false;
+    this._tuningState = {
+      metalness: 0.7,
+      roughness: 0.25,
+      glassTransmission: 0.9,
+      glassTint: '#aaccff',
+    };
 
     this.root = document.createElement('div');
     this.root.className = 'ui-layer ui-showroom';
@@ -151,6 +163,29 @@ export class ShowroomUI {
             `).join('')}
           </div>
         </section>
+
+        <section class="ui-showroom-panel ui-tuning-panel" data-bind="tuning-panel" aria-hidden="true">
+          <div class="ui-panel-title">调校</div>
+          <label class="ui-tune-row">
+            <span>金属度</span>
+            <input class="ui-tune-range" data-tune-key="metalness" type="range" min="0" max="1" step="0.01" value="0.7">
+            <b data-bind="tune-metalness">70</b>
+          </label>
+          <label class="ui-tune-row">
+            <span>粗糙度</span>
+            <input class="ui-tune-range" data-tune-key="roughness" type="range" min="0" max="1" step="0.01" value="0.25">
+            <b data-bind="tune-roughness">25</b>
+          </label>
+          <label class="ui-tune-row">
+            <span>玻璃</span>
+            <input class="ui-tune-range" data-tune-key="glassTransmission" type="range" min="0" max="1" step="0.01" value="0.9">
+            <b data-bind="tune-glassTransmission">90</b>
+          </label>
+          <label class="ui-tune-color-row">
+            <span>玻璃色</span>
+            <input class="ui-tune-color" data-tune-key="glassTint" type="color" value="#aaccff" aria-label="玻璃色">
+          </label>
+        </section>
       </div>
 
       <div class="ui-bottom-bar">
@@ -171,6 +206,30 @@ export class ShowroomUI {
           <button class="ui-btn ui-btn-primary ui-btn-large" data-action="start">开始比赛</button>
         </div>
       </div>
+
+      <div class="ui-track-modal" data-bind="track-modal" aria-hidden="true">
+        <div class="ui-track-dialog" role="dialog" aria-modal="true" aria-label="选择赛道">
+          <div class="ui-track-dialog-head">
+            <div>
+              <div class="ui-track-eyebrow">RACE ROUTE</div>
+              <div class="ui-track-title">选择赛车场地</div>
+            </div>
+            <button class="ui-track-close" data-action="track-cancel" aria-label="关闭">×</button>
+          </div>
+          <div class="ui-track-options">
+            ${RACE_TRACKS.map((track) => `
+              <button class="ui-track-option" data-action="track-select" data-track-id="${track.id}" aria-pressed="false">
+                <span class="ui-track-option-name">${track.name}</span>
+                <span class="ui-track-option-tagline">${track.tagline}</span>
+              </button>
+            `).join('')}
+          </div>
+          <div class="ui-track-actions">
+            <button class="ui-btn ui-btn-ghost" data-action="track-cancel">取消</button>
+            <button class="ui-btn ui-btn-primary" data-action="track-confirm">进入比赛</button>
+          </div>
+        </div>
+      </div>
     `;
 
     this.$carName = this.root.querySelector('[data-bind="carName"]');
@@ -188,6 +247,15 @@ export class ShowroomUI {
     this.$stageFxToggle = this.root.querySelector('[data-action="toggle-fx"]');
     this.$sceneToggle = this.root.querySelector('[data-action="toggle-scene"]');
     this.$panelVisibilityToggle = this.root.querySelector('[data-action="toggle-panels"]');
+    this.$trackModal = this.root.querySelector('[data-bind="track-modal"]');
+    this.$trackButtons = [...this.root.querySelectorAll('.ui-track-option')];
+    this.$tuningPanel = this.root.querySelector('[data-bind="tuning-panel"]');
+    this.$tuneControls = [...this.root.querySelectorAll('[data-tune-key]')];
+    this.$tuneValueLabels = {
+      metalness: this.root.querySelector('[data-bind="tune-metalness"]'),
+      roughness: this.root.querySelector('[data-bind="tune-roughness"]'),
+      glassTransmission: this.root.querySelector('[data-bind="tune-glassTransmission"]'),
+    };
 
     this._onClick = (event) => {
       const btn = event.target.closest('[data-action]');
@@ -196,7 +264,7 @@ export class ShowroomUI {
       const act = btn.getAttribute('data-action');
       if (act === 'prev') this.onPrevCar?.();
       if (act === 'next') this.onNextCar?.();
-      if (act === 'start') this.onStartRace?.();
+      if (act === 'start') this.openTrackPicker();
       if (act === 'back') this.onBackToMenu?.();
       if (act === 'paint') this._applyPaint(btn.dataset.color);
       if (act === 'paint-random') this._applyRandomPaint();
@@ -205,6 +273,9 @@ export class ShowroomUI {
       if (act === 'toggle-fx') this._toggleStageFx();
       if (act === 'toggle-scene') this._toggleVenueScene();
       if (act === 'toggle-panels') this._togglePanels();
+      if (act === 'track-select') this.setTrackId(btn.dataset.trackId);
+      if (act === 'track-cancel') this.closeTrackPicker();
+      if (act === 'track-confirm') this._confirmTrackAndStart();
 
       if (act.startsWith('venue-')) {
         const mode = act.replace('venue-', '');
@@ -219,11 +290,27 @@ export class ShowroomUI {
       }
     };
 
+    this._onInput = (event) => {
+      const input = event.target.closest('[data-tune-key]');
+      if (!input || !this.root.contains(input)) return;
+      this._applyTuneInput(input);
+    };
+
     this._onKeyDown = (event) => {
       if (!this._visible || event.repeat || shouldIgnoreKeyTarget(event.target)) return;
 
       const key = event.key;
       const lowerKey = key.toLowerCase();
+      if (this._trackPickerVisible) {
+        if (key === 'Enter') {
+          event.preventDefault();
+          this._confirmTrackAndStart();
+        } else if (key === 'Escape') {
+          event.preventDefault();
+          this.closeTrackPicker();
+        }
+        return;
+      }
       if (key === 'ArrowLeft' || lowerKey === 'a') {
         event.preventDefault();
         this.onPrevCar?.();
@@ -236,7 +323,7 @@ export class ShowroomUI {
       }
       if (key === 'Enter') {
         event.preventDefault();
-        this.onStartRace?.();
+        this.openTrackPicker();
         return;
       }
       if (lowerKey === 'h') {
@@ -267,11 +354,13 @@ export class ShowroomUI {
     };
 
     this.root.addEventListener('click', this._onClick);
+    this.root.addEventListener('input', this._onInput);
     this.setCameraMode(this._cameraMode);
     this.setSpinActive(this._spinActive);
     this.setStageFxActive(this._stageFxActive);
     this.setVenueSceneVisible(this._venueSceneVisible);
     this.setVenueMode(this._venueMode);
+    this.setTrackId(this._trackId);
     this.setPanelsVisible(this._panelsVisible);
     this.hide();
   }
@@ -296,6 +385,7 @@ export class ShowroomUI {
 
   syncCarConfig(cfg = {}) {
     this.setActivePaint(cfg.bodyColor);
+    this.setTuningState(cfg);
   }
 
   setActivePaint(color) {
@@ -350,6 +440,54 @@ export class ShowroomUI {
     }
   }
 
+  setTrackId(trackId = DEFAULT_TRACK_ID) {
+    this._trackId = normalizeTrackId(trackId);
+    for (const btn of this.$trackButtons) {
+      const isActive = btn.dataset.trackId === this._trackId;
+      btn.classList.toggle('is-active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    }
+  }
+
+  setTuningState(cfg = {}) {
+    const next = {
+      ...this._tuningState,
+      ...Object.fromEntries(
+        Object.entries(cfg).filter(([, value]) => value !== undefined && value !== null),
+      ),
+    };
+
+    this._tuningState = {
+      metalness: clamp01(next.metalness),
+      roughness: clamp01(next.roughness),
+      glassTransmission: clamp01(next.glassTransmission),
+      glassTint: normalizeColor(next.glassTint || this._tuningState.glassTint),
+    };
+
+    for (const input of this.$tuneControls) {
+      const key = input.dataset.tuneKey;
+      if (!(key in this._tuningState)) continue;
+      input.value = key === 'glassTint'
+        ? this._tuningState[key]
+        : String(this._tuningState[key]);
+    }
+
+    this._syncTuneLabels();
+  }
+
+  openTrackPicker() {
+    this._trackPickerVisible = true;
+    this.$trackModal?.classList.add('is-visible');
+    this.$trackModal?.setAttribute('aria-hidden', 'false');
+    this.setTrackId(this._trackId);
+  }
+
+  closeTrackPicker() {
+    this._trackPickerVisible = false;
+    this.$trackModal?.classList.remove('is-visible');
+    this.$trackModal?.setAttribute('aria-hidden', 'true');
+  }
+
   _applyPaint(color) {
     if (!color) return;
     this.setActivePaint(color);
@@ -365,6 +503,26 @@ export class ShowroomUI {
 
   _toggleAllPanels() {
     this.setAdvancedVisible(!this._advancedVisible);
+  }
+
+  _applyTuneInput(input) {
+    const key = input.dataset.tuneKey;
+    if (!key) return;
+
+    const value = input.type === 'color'
+      ? normalizeColor(input.value)
+      : clamp01(input.value);
+
+    this._tuningState = { ...this._tuningState, [key]: value };
+    this._syncTuneLabels();
+    this.onTuneChange?.({ [key]: value });
+  }
+
+  _syncTuneLabels() {
+    for (const [key, label] of Object.entries(this.$tuneValueLabels)) {
+      if (!label) continue;
+      label.textContent = String(Math.round(clamp01(this._tuningState[key]) * 100));
+    }
   }
 
   _togglePanels() {
@@ -389,14 +547,22 @@ export class ShowroomUI {
     this.onToggleVenueScene?.(next);
   }
 
+  _confirmTrackAndStart() {
+    const trackId = this._trackId;
+    this.closeTrackPicker();
+    this.onStartRace?.(trackId);
+  }
+
   setAdvancedVisible(visible) {
     this._advancedVisible = !!visible;
     this.$advancedToggle?.classList.toggle('is-active', this._advancedVisible);
     this.$advancedToggle?.setAttribute('aria-pressed', this._advancedVisible ? 'true' : 'false');
+    this.$tuningPanel?.classList.toggle('is-visible', this._advancedVisible);
+    this.$tuningPanel?.setAttribute('aria-hidden', this._advancedVisible ? 'false' : 'true');
     const gui = document.querySelector('.datgui-theme')
       || document.querySelector('.dg.ac')
       || document.querySelector('.dg');
-    if (gui) gui.style.display = this._advancedVisible ? '' : 'none';
+    if (gui) gui.style.display = 'none';
   }
 
   setPanelsVisible(visible) {
@@ -420,6 +586,7 @@ export class ShowroomUI {
 
   hide() {
     this.root.style.display = 'none';
+    this.closeTrackPicker();
     if (this._visible) {
       document.removeEventListener('keydown', this._onKeyDown);
       this._visible = false;
@@ -428,12 +595,24 @@ export class ShowroomUI {
 
   destroy() {
     this.root.removeEventListener('click', this._onClick);
+    this.root.removeEventListener('input', this._onInput);
     document.removeEventListener('keydown', this._onKeyDown);
   }
 }
 
 function normalizeHex(color) {
   return String(color || '').trim().toLowerCase();
+}
+
+function normalizeColor(color) {
+  const value = normalizeHex(color);
+  return /^#[0-9a-f]{6}$/.test(value) ? value : '#aaccff';
+}
+
+function clamp01(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, n));
 }
 
 function shouldIgnoreKeyTarget(target) {

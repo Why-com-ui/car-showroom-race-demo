@@ -340,6 +340,14 @@ export class CarController {
     };
   }
 
+  addNitro(amount = 0) {
+    const capacity = Math.max(1, this.tuning.nitroCapacity || 100);
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value <= 0) return this.state.nitro;
+    this.state.nitro = clamp(this.state.nitro + value, 0, capacity);
+    return this.state.nitro;
+  }
+
   _updateNitroCharge(dt) {
     const { state, tuning } = this;
     if (state.nitroActive) return;

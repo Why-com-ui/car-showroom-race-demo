@@ -15,6 +15,7 @@ import { createMenuState } from './scenes/menu/MenuState.js';
 import { createShowroomState } from './scenes/showroom/ShowroomState.js';
 import { createRaceIntroState } from './scenes/race/RaceIntroState.js';
 import { createRaceState } from './scenes/race/RaceState.js';
+import { DEFAULT_TRACK_ID, loadRaceTrack, normalizeTrackId } from './scenes/race/tracks/trackRegistry.js';
 
 function shouldIgnoreGameplayFocusTarget(target) {
   if (!(target instanceof Element)) return false;
@@ -48,6 +49,7 @@ function reportRuntimeError(error) {
   const store = new Store({
     carModels: DEFAULT_CAR_MODELS,
     showroom: { carIndex: 0, venueMode: 'storm' },
+    race: { trackId: DEFAULT_TRACK_ID },
     carConfig: null,
     lastRace: null,
   });
@@ -109,6 +111,7 @@ function reportRuntimeError(error) {
   const runtime = {
     raceSetup: null,
     isStartingRace: false,
+    selectedTrackId: DEFAULT_TRACK_ID,
     transferredCar: null,
   };
 
@@ -118,18 +121,26 @@ function reportRuntimeError(error) {
   let resultState = null;
   let raceMetricsProvider = null;
   let ctx = null;
-  let trackModulePromise = null;
+  const trackModulePromises = new Map();
 
-  const ensureRaceTrackModule = async () => {
-    trackModulePromise ||= import('./scenes/race/tracks/Track_NeonSpline.js');
-    const trackModule = await trackModulePromise;
+  const ensureRaceTrackModule = async (trackId = store.getState().race?.trackId) => {
+    const id = normalizeTrackId(trackId);
+    if (!trackModulePromises.has(id)) {
+      trackModulePromises.set(id, loadRaceTrack(id));
+    }
+    const trackModule = await trackModulePromises.get(id);
     if (ctx) ctx.trackModule = trackModule;
+    store.setState((prev) => ({
+      race: { ...(prev.race || {}), trackId: id },
+    }));
     return trackModule;
   };
 
-  const startRaceFlow = async () => {
+  const startRaceFlow = async (trackId) => {
+    const id = normalizeTrackId(trackId || store.getState().race?.trackId);
     runtime.isStartingRace = true;
-    await ensureRaceTrackModule();
+    runtime.selectedTrackId = id;
+    await ensureRaceTrackModule(id);
     await transitionTo(raceIntroState);
   };
 
@@ -182,6 +193,10 @@ function reportRuntimeError(error) {
         void showroomState?.applyQuickPaint?.(color);
       },
 
+      onTuneChange: (patch) => {
+        void showroomState?.applyTunePatch?.(patch);
+      },
+
       onToggleSpin: (active) => {
         showroomState?.setAutoRotate?.(active);
       },
@@ -198,8 +213,8 @@ function reportRuntimeError(error) {
         showroomState?.setVenueMode?.(mode);
       },
 
-      onStartRace: () => {
-        void startRaceFlow().catch(reportRuntimeError);
+      onStartRace: (trackId) => {
+        void startRaceFlow(trackId).catch(reportRuntimeError);
       },
 
       onExitRace: () => {
@@ -215,7 +230,7 @@ function reportRuntimeError(error) {
       },
 
       onRestartRace: () => {
-        void startRaceFlow().catch(reportRuntimeError);
+        void startRaceFlow(store.getState().race?.trackId).catch(reportRuntimeError);
       },
 
       onBackToShowroom: () => {
