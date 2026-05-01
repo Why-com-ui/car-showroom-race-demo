@@ -1,10 +1,24 @@
 // src/core/App.js
 import * as THREE from 'three';
 
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+let postProcessingModulesPromise = null;
+
+function loadPostProcessingModules() {
+  if (!postProcessingModulesPromise) {
+    postProcessingModulesPromise = Promise.all([
+      import('three/examples/jsm/postprocessing/EffectComposer.js'),
+      import('three/examples/jsm/postprocessing/RenderPass.js'),
+      import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
+      import('three/examples/jsm/postprocessing/OutputPass.js'),
+    ]).then(([composerModule, renderPassModule, bloomPassModule, outputPassModule]) => ({
+      EffectComposer: composerModule.EffectComposer,
+      RenderPass: renderPassModule.RenderPass,
+      UnrealBloomPass: bloomPassModule.UnrealBloomPass,
+      OutputPass: outputPassModule.OutputPass,
+    }));
+  }
+  return postProcessingModulesPromise;
+}
 
 export class App {
   constructor({ mount, maxPixelRatio = 2 } = {}) {
@@ -48,6 +62,7 @@ export class App {
 
     this.composer = null;
     this.bokehPass = null;
+    this._postProcessingToken = 0;
 
     this._onResize = () => this._handleResize();
     this._onSurfacePointerDown = (event) => {
@@ -71,15 +86,20 @@ export class App {
   }
 
   setActive({ scene, camera, update }) {
+    const token = ++this._postProcessingToken;
+
     this.scene = scene || null;
     this.camera = camera || null;
     this.updateFn = typeof update === 'function' ? update : null;
 
+    this._disposeComposer();
+
     if (this.scene && this.camera) {
-      this._initPostProcessing();
-    } else {
-      this.composer = null;
-      this.bokehPass = null;
+      this._initPostProcessing(token).catch((error) => {
+        if (token === this._postProcessingToken) {
+          console.warn('Post-processing init failed:', error);
+        }
+      });
     }
 
     this._handleResize();
@@ -110,13 +130,15 @@ export class App {
     };
   }
 
-  _initPostProcessing() {
+  async _initPostProcessing(token) {
     if (!this.renderer || !this.scene || !this.camera) return;
+    const { EffectComposer, RenderPass, UnrealBloomPass, OutputPass } = await loadPostProcessingModules();
+    if (token !== this._postProcessingToken || !this.renderer || !this.scene || !this.camera) return;
 
-    this.composer = new EffectComposer(this.renderer);
+    const composer = new EffectComposer(this.renderer);
 
     const renderPass = new RenderPass(this.scene, this.camera);
-    this.composer.addPass(renderPass);
+    composer.addPass(renderPass);
 
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
@@ -124,12 +146,27 @@ export class App {
       0.26,
       0.88
     );
-    this.composer.addPass(bloomPass);
+    composer.addPass(bloomPass);
 
     this.bokehPass = null;
 
     const outputPass = new OutputPass();
-    this.composer.addPass(outputPass);
+    composer.addPass(outputPass);
+    this.composer = composer;
+    this._handleResize();
+  }
+
+  _disposeComposer() {
+    if (!this.composer) {
+      this.bokehPass = null;
+      return;
+    }
+
+    this.composer.renderTarget1?.dispose?.();
+    this.composer.renderTarget2?.dispose?.();
+    this.composer.dispose?.();
+    this.composer = null;
+    this.bokehPass = null;
   }
 
   start() {
@@ -147,18 +184,13 @@ export class App {
 
   destroy() {
     this.stop();
+    this._postProcessingToken += 1;
     window.removeEventListener('resize', this._onResize);
     this.inputSurface.removeEventListener('pointerdown', this._onSurfacePointerDown);
     this.inputSurface.removeEventListener('focus', this._onSurfaceFocus);
     this.inputSurface.removeEventListener('blur', this._onSurfaceBlur);
     this.renderer.dispose?.();
-
-    if (this.composer) {
-      this.composer.renderTarget1.dispose();
-      this.composer.renderTarget2.dispose();
-      this.composer = null;
-      this.bokehPass = null;
-    }
+    this._disposeComposer();
 
     if (this.renderer.domElement?.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

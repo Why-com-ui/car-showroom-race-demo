@@ -12,9 +12,6 @@ import { DEFAULT_CAR_MODELS, DEFAULT_SETTINGS, STATES } from './core/constants.j
 import { UiRoot } from './ui/UiRoot.js';
 
 import { createMenuState } from './scenes/menu/MenuState.js';
-import { createShowroomState } from './scenes/showroom/ShowroomState.js';
-import { createRaceIntroState } from './scenes/race/RaceIntroState.js';
-import { createRaceState } from './scenes/race/RaceState.js';
 import { DEFAULT_TRACK_ID, loadRaceTrack, normalizeTrackId } from './scenes/race/tracks/trackRegistry.js';
 
 function shouldIgnoreGameplayFocusTarget(target) {
@@ -121,7 +118,67 @@ function reportRuntimeError(error) {
   let resultState = null;
   let raceMetricsProvider = null;
   let ctx = null;
+  let createRaceStateFn = null;
+  let showroomStatePromise = null;
+  let raceIntroStatePromise = null;
+  let raceStateFactoryPromise = null;
   const trackModulePromises = new Map();
+
+  const ensureShowroomState = async () => {
+    if (showroomState) return showroomState;
+    if (!ctx) throw new Error('Showroom state requested before runtime context is ready');
+
+    if (!showroomStatePromise) {
+      showroomStatePromise = import('./scenes/showroom/ShowroomState.js')
+        .then(({ createShowroomState }) => {
+          showroomState = createShowroomState(ctx);
+          return showroomState;
+        })
+        .catch((error) => {
+          showroomStatePromise = null;
+          throw error;
+        });
+    }
+
+    return showroomStatePromise;
+  };
+
+  const ensureRaceIntroState = async () => {
+    if (raceIntroState) return raceIntroState;
+    if (!ctx) throw new Error('Race intro state requested before runtime context is ready');
+
+    if (!raceIntroStatePromise) {
+      raceIntroStatePromise = import('./scenes/race/RaceIntroState.js')
+        .then(({ createRaceIntroState }) => {
+          raceIntroState = createRaceIntroState(ctx);
+          return raceIntroState;
+        })
+        .catch((error) => {
+          raceIntroStatePromise = null;
+          throw error;
+        });
+    }
+
+    return raceIntroStatePromise;
+  };
+
+  const ensureRaceStateFactory = async () => {
+    if (createRaceStateFn) return createRaceStateFn;
+
+    if (!raceStateFactoryPromise) {
+      raceStateFactoryPromise = import('./scenes/race/RaceState.js')
+        .then(({ createRaceState }) => {
+          createRaceStateFn = createRaceState;
+          return createRaceStateFn;
+        })
+        .catch((error) => {
+          raceStateFactoryPromise = null;
+          throw error;
+        });
+    }
+
+    return raceStateFactoryPromise;
+  };
 
   const ensureRaceTrackModule = async (trackId = store.getState().race?.trackId) => {
     const id = normalizeTrackId(trackId);
@@ -138,10 +195,12 @@ function reportRuntimeError(error) {
 
   const startRaceFlow = async (trackId) => {
     const id = normalizeTrackId(trackId || store.getState().race?.trackId);
-    runtime.isStartingRace = true;
     runtime.selectedTrackId = id;
     await ensureRaceTrackModule(id);
-    await transitionTo(raceIntroState);
+    await ensureRaceStateFactory();
+    const introState = await ensureRaceIntroState();
+    runtime.isStartingRace = sm.current?.name === STATES.SHOWROOM;
+    await transitionTo(introState);
   };
 
   const setRaceDebugMetricsProvider = (provider) => {
@@ -174,7 +233,9 @@ function reportRuntimeError(error) {
       },
 
       onEnterShowroom: () => {
-        void transitionTo(showroomState).catch(reportRuntimeError);
+        void ensureShowroomState()
+          .then((state) => transitionTo(state))
+          .catch(reportRuntimeError);
       },
 
       onBackToMenu: () => {
@@ -234,7 +295,9 @@ function reportRuntimeError(error) {
       },
 
       onBackToShowroom: () => {
-        void transitionTo(showroomState).catch(reportRuntimeError);
+        void ensureShowroomState()
+          .then((state) => transitionTo(state))
+          .catch(reportRuntimeError);
       },
     },
   });
@@ -285,7 +348,12 @@ function reportRuntimeError(error) {
     debugFlags: {
       input: debugInputEnabled,
     },
-    createRaceState: (c) => createRaceState(c),
+    createRaceState: () => {
+      if (!createRaceStateFn) {
+        throw new Error('Race state requested before its module finished loading');
+      }
+      return createRaceStateFn(ctx);
+    },
     onRaceFinish: (result) => {
       store.setState({ lastRace: result });
       ui.setResult(result);
@@ -296,9 +364,6 @@ function reportRuntimeError(error) {
   };
 
   menuState = createMenuState(ctx);
-  showroomState = createShowroomState(ctx);
-  raceIntroState = createRaceIntroState(ctx);
-  const raceStateFactory = () => createRaceState(ctx);
 
   resultState = {
     name: STATES.RESULT,
@@ -314,8 +379,6 @@ function reportRuntimeError(error) {
       app.blurInputSurface();
     },
   };
-
-  ctx.createRaceState = () => raceStateFactory();
 
   app.start();
   await transitionTo(menuState);

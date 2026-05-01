@@ -244,18 +244,6 @@ export function createTrack(THREE_Instance, opts = {}) {
         }
       }
 
-      for (let i = 6; i < samples.length; i += 10) {
-        const sample = samples[i];
-        const side = Math.sin(sample.s * 0.045) > 0 ? 1 : -1;
-        for (let k = 0; k < 3; k++) {
-          const pos = sample.center.clone()
-            .addScaledVector(sample.right, side * (2.0 + k * 1.35))
-            .addScaledVector(sample.normal, 0.1)
-            .addScaledVector(sample.tangent, k * 1.1);
-          const arrow = addBox(T, this.root, boxGeo, hazardMat, [1.0, 0.08, 0.22], pos, sample.tangent, sample.right, sample.normal);
-          arrow.rotation.z += side * 0.72;
-        }
-      }
     }
 
     _addFactorySet(samples) {
