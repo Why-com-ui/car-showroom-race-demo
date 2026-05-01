@@ -275,9 +275,10 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
       if (!cfg.features.quantumCity) return;
       const start = branchSamples.find((sample) => sample.branchAlpha > 0.08);
       const end = [...branchSamples].reverse().find((sample) => sample.branchAlpha > 0.08);
+      const offset = cfg.roadWidth * (cfg.features.quantumPortalSideOffset ?? 0.72);
       for (const sample of [start, end]) {
         if (!sample) continue;
-        addPortal(T, this.root, cfg, sample, materials, geometries, side, cfg.roadWidth * 0.45);
+        addPortal(T, this.root, cfg, sample, materials, geometries, side, side * offset);
       }
     }
 
@@ -314,7 +315,7 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
     _addScenery(samples, branchSamples) {
       if (cfg.features.blueRain) addBlueRainScenery(T, this.root, cfg, samples, materials, geometries, rng);
       if (cfg.features.auroraValley) addAuroraScenery(T, this.root, cfg, samples, materials, geometries, rng);
-      if (cfg.features.quantumCity) addQuantumScenery(T, this.root, cfg, samples, branchSamples, materials, geometries, rng);
+      if (cfg.features.quantumCity) addQuantumScenery(T, this.root, root, cfg, samples, branchSamples, materials, geometries, rng);
       if (cfg.features.crystalCanyon) addCrystalCanyonScenery(T, this.root, cfg, samples, materials, geometries, rng);
     }
 
@@ -327,6 +328,9 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
       for (const geo of this.geometries) geo.dispose?.();
       for (let i = interactables.length - 1; i >= 0; i--) {
         if (interactables[i].chunkId === this.id) interactables.splice(i, 1);
+      }
+      if (root.userData.quantumCodeFlocks) {
+        root.userData.quantumCodeFlocks = root.userData.quantumCodeFlocks.filter((boid) => boid.chunkId !== this.id);
       }
     }
   }
@@ -351,6 +355,9 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
     }
     if (root.userData.aurora) {
       root.userData.aurora.material.opacity = root.userData.aurora.userData.baseOpacity + Math.sin(performance.now() * 0.001) * 0.04;
+    }
+    if (root.userData.quantumCodeFlocks) {
+      updateQuantumCodeFlocks(root.userData.quantumCodeFlocks);
     }
 
     if (!playerPos || activeChunks.length === 0) return;
@@ -464,7 +471,7 @@ export function createProceduralSplineTrack(THREE_Instance, config = {}, opts = 
       for (const chunk of activeChunks) chunk.dispose();
       activeChunks.length = 0;
       for (const geo of Object.values(geometries)) geo.dispose?.();
-      for (const mat of Object.values(materials)) mat.dispose?.();
+      for (const mat of Object.values(materials)) disposeMaterialLike(mat);
     },
   };
 }
@@ -552,16 +559,18 @@ function addRoadStriping(T, parent, cfg, samples, materials, geometries, isBranc
     }
   }
 
-  for (let i = 5; i < samples.length; i += 10) {
-    const sample = samples[i];
-    const turnSide = Math.sin(sample.s * 0.04 + (isBranch ? 1.5 : 0)) > 0 ? 1 : -1;
-    for (let k = 0; k < 3; k++) {
-      const pos = sample.center.clone()
-        .addScaledVector(sample.right, turnSide * (2.2 + k * 1.35))
-        .addScaledVector(sample.normal, 0.1)
-        .addScaledVector(sample.tangent, k * 1.1);
-      const arrow = addBox(T, parent, geometries.box, materials.marker, [1.0, 0.08, 0.22], pos, sample.tangent, sample.right, sample.normal);
-      arrow.rotation.z += turnSide * 0.7;
+  if (cfg.features.roadArrows !== false) {
+    for (let i = 5; i < samples.length; i += 10) {
+      const sample = samples[i];
+      const turnSide = Math.sin(sample.s * 0.04 + (isBranch ? 1.5 : 0)) > 0 ? 1 : -1;
+      for (let k = 0; k < 3; k++) {
+        const pos = sample.center.clone()
+          .addScaledVector(sample.right, turnSide * (2.2 + k * 1.35))
+          .addScaledVector(sample.normal, 0.1)
+          .addScaledVector(sample.tangent, k * 1.1);
+        const arrow = addBox(T, parent, geometries.box, materials.marker, [1.0, 0.08, 0.22], pos, sample.tangent, sample.right, sample.normal);
+        arrow.rotation.z += turnSide * 0.7;
+      }
     }
   }
 }
@@ -598,9 +607,12 @@ function addHeatRibbons(T, parent, cfg, samples, materials, geometries) {
 }
 
 function addQuantumRoadSigns(T, parent, cfg, samples, materials, geometries) {
-  for (let i = 6; i < samples.length; i += 12) {
+  const every = cfg.features.quantumPortalEvery ?? 16;
+  const sideOffset = cfg.roadWidth * (cfg.features.quantumPortalSideOffset ?? 0.62);
+  for (let i = 6; i < samples.length; i += every) {
     const sample = samples[i];
-    addPortal(T, parent, cfg, sample, materials, geometries, Math.sin(sample.s * 0.03) > 0 ? 1 : -1, 0);
+    const side = Math.sin(sample.s * 0.03) > 0 ? 1 : -1;
+    addPortal(T, parent, cfg, sample, materials, geometries, side, side * sideOffset);
   }
 }
 
@@ -642,26 +654,105 @@ function addAuroraScenery(T, parent, cfg, samples, materials, geometries, rng) {
   }
 }
 
-function addQuantumScenery(T, parent, cfg, samples, branchSamples, materials, geometries, rng) {
-  for (let i = 3; i < samples.length; i += 6) {
+function addQuantumScenery(T, parent, trackRoot, cfg, samples, branchSamples, materials, geometries, rng) {
+  const cityEvery = cfg.features.quantumCityEvery ?? 8;
+  const cityOffset = cfg.features.quantumCityOffset ?? 44;
+  const minHeight = cfg.features.quantumCityHeightMin ?? 10;
+  const maxHeight = cfg.features.quantumCityHeightMax ?? 30;
+
+  for (let i = 3; i < samples.length; i += cityEvery) {
     const sample = samples[i];
     for (const side of [-1, 1]) {
-      const distance = cfg.roadWidth / 2 + 18 + rng() * 18;
-      const height = 16 + rng() * 34;
+      const distance = cfg.roadWidth / 2 + cityOffset + rng() * 28;
+      const height = minHeight + rng() * Math.max(1, maxHeight - minHeight);
       const pos = sample.center.clone()
         .addScaledVector(sample.right, side * distance)
-        .addScaledVector(worldUpLike(sample.normal), height / 2 - 1);
-      addBox(T, parent, geometries.box, materials.distant, [4 + rng() * 8, height, 8 + rng() * 16], pos, sample.tangent, sample.right, worldUpLike(sample.normal));
+        .addScaledVector(worldUpLike(sample.normal), height / 2 - 2);
+      addBox(T, parent, geometries.box, materials.quantumDistant || materials.distant, [3 + rng() * 5, height, 5 + rng() * 9], pos, sample.tangent, sample.right, worldUpLike(sample.normal));
     }
   }
 
-  const tunnelEvery = branchSamples ? 12 : 15;
-  for (let i = 4; i < samples.length; i += tunnelEvery) {
+  const gateEvery = cfg.features.quantumGateEvery ?? (branchSamples ? 14 : 18);
+  for (let i = 4; i < samples.length; i += gateEvery) {
     const sample = samples[i];
-    const pos = sample.center.clone().addScaledVector(sample.normal, 6.2);
-    addBox(T, parent, geometries.box, materials.glow, [cfg.roadWidth + 5.5, 0.42, 1.0], pos, sample.tangent, sample.right, sample.normal);
-    addBox(T, parent, geometries.box, materials.glow, [0.42, 12.4, 1.0], pos.clone().addScaledVector(sample.right, cfg.roadWidth / 2 + 2.8).addScaledVector(sample.normal, -0.1), sample.tangent, sample.right, sample.normal);
-    addBox(T, parent, geometries.box, materials.glow, [0.42, 12.4, 1.0], pos.clone().addScaledVector(sample.right, -cfg.roadWidth / 2 - 2.8).addScaledVector(sample.normal, -0.1), sample.tangent, sample.right, sample.normal);
+    for (const side of [-1, 1]) {
+      const base = sample.center.clone()
+        .addScaledVector(sample.right, side * (cfg.roadWidth / 2 + 5.4))
+        .addScaledVector(sample.normal, 3.8);
+      const fin = addBox(T, parent, geometries.box, materials.glow, [0.22, 6.8, 0.8], base, sample.tangent, sample.right, sample.normal);
+      fin.rotation.z += side * 0.24;
+
+      const ribbonPos = base.clone()
+        .addScaledVector(sample.right, side * 2.2)
+        .addScaledVector(sample.normal, 3.7);
+      addBox(T, parent, geometries.box, materials.glass, [0.12, 0.28, 7.6], ribbonPos, sample.tangent, sample.right, sample.normal);
+    }
+  }
+
+  if (cfg.features.quantumFlock !== false) {
+    addQuantumCodeFlock(T, parent, trackRoot, cfg, samples, materials, rng);
+  }
+}
+
+function addQuantumCodeFlock(T, parent, trackRoot, cfg, samples, materials, rng) {
+  const boids = trackRoot.userData.quantumCodeFlocks || (trackRoot.userData.quantumCodeFlocks = []);
+  const glyphs = materials.codeGlyphs || [];
+  if (!glyphs.length) return;
+
+  const every = cfg.features.quantumFlockEvery ?? 4;
+  const sideOffset = cfg.features.quantumFlockSideOffset ?? 7;
+  const chunkId = samples[0]?.chunkId ?? -1;
+
+  for (let i = 2; i < samples.length; i += every) {
+    const sample = samples[i];
+    const side = rng() > 0.5 ? 1 : -1;
+    const material = glyphs[Math.floor(rng() * glyphs.length)];
+    const sprite = new T.Sprite(material);
+    const baseScale = 0.42 + rng() * 0.28;
+
+    sprite.name = `${cfg.id}_CodeBoid`;
+    sprite.frustumCulled = false;
+    sprite.scale.set(baseScale * 1.35, baseScale * 0.52, 1);
+
+    const anchor = sample.center.clone()
+      .addScaledVector(sample.right, side * (cfg.roadWidth / 2 + sideOffset + rng() * 12))
+      .addScaledVector(sample.normal, 7.0 + rng() * 5.6);
+
+    parent.add(sprite);
+    boids.push({
+      sprite,
+      chunkId,
+      anchor,
+      tangent: sample.tangent.clone(),
+      right: sample.right.clone(),
+      normal: sample.normal.clone(),
+      phase: rng() * Math.PI * 2,
+      schoolPhase: rng() * Math.PI * 2,
+      speed: 0.62 + rng() * 0.62,
+      forwardAmp: 2.6 + rng() * 4.8,
+      lateralAmp: 1.4 + rng() * 3.4,
+      verticalAmp: 0.8 + rng() * 1.8,
+      scaleX: baseScale * 1.35,
+      scaleY: baseScale * 0.52,
+    });
+  }
+}
+
+function updateQuantumCodeFlocks(boids) {
+  const time = performance.now() * 0.001;
+  for (const boid of boids) {
+    const wave = time * boid.speed + boid.phase;
+    const school = Math.sin(time * 0.38 + boid.schoolPhase);
+    const lateral = Math.cos(wave * 1.18) * boid.lateralAmp + school * 0.72;
+    const forward = Math.sin(wave * 0.86) * boid.forwardAmp;
+    const vertical = Math.sin(wave * 1.47 + school) * boid.verticalAmp;
+    const pulse = 0.86 + Math.sin(wave * 2.4) * 0.12;
+
+    boid.sprite.position.copy(boid.anchor)
+      .addScaledVector(boid.tangent, forward)
+      .addScaledVector(boid.right, lateral)
+      .addScaledVector(boid.normal, vertical);
+    boid.sprite.scale.set(boid.scaleX * pulse, boid.scaleY * pulse, 1);
   }
 }
 
@@ -703,10 +794,11 @@ function addCrystalCanyonScenery(T, parent, cfg, samples, materials, geometries,
 function addPortal(T, parent, cfg, sample, materials, geometries, side = 1, lateralOffset = 0) {
   const pos = sample.center.clone()
     .addScaledVector(sample.right, lateralOffset)
-    .addScaledVector(sample.normal, 5.5);
-  const ring = new T.Mesh(geometries.torus, materials.glow);
+    .addScaledVector(sample.normal, cfg.features.quantumPortalHeight ?? 5.5);
+  const ring = new T.Mesh(geometries.torus, materials.quantumPortal || materials.glow);
   ring.name = `${cfg.id}_Portal`;
-  ring.scale.set(cfg.roadWidth * 0.42, cfg.roadWidth * 0.42, 1);
+  const scale = cfg.roadWidth * (cfg.features.quantumPortalScale ?? 0.42);
+  ring.scale.set(scale, scale, 1);
   orientObject(T, ring, pos, sample.tangent, sample.right, sample.normal);
   ring.rotation.z += Math.PI * 0.5 * side;
   parent.add(ring);
@@ -856,6 +948,30 @@ function createMaterials(T, cfg) {
     side: T.DoubleSide,
   });
   const glow = makeGlowMaterial(T, colors.rail, 1.1);
+  const quantumMaterials = cfg.features?.quantumCity ? {
+    quantumDistant: new T.MeshStandardMaterial({
+      color: colors.distant,
+      roughness: 0.5,
+      metalness: 0.46,
+      emissive: colors.rail,
+      emissiveIntensity: 0.2,
+      transparent: true,
+      opacity: 0.48,
+      depthWrite: false,
+    }),
+    quantumPortal: new T.MeshStandardMaterial({
+      color: colors.marker ?? colors.rail,
+      roughness: 0.22,
+      metalness: 0.38,
+      emissive: colors.marker ?? colors.rail,
+      emissiveIntensity: 0.92,
+      transparent: true,
+      opacity: 0.52,
+      depthWrite: false,
+    }),
+    codeGlyphs: cfg.features?.quantumFlock !== false ? createCodeGlyphMaterials(T, colors) : [],
+  } : {};
+
   return {
     road,
     branchRoad: new T.MeshStandardMaterial({
@@ -872,6 +988,7 @@ function createMaterials(T, cfg) {
     marker: makeGlowMaterial(T, colors.marker, 0.92),
     glass,
     glow,
+    ...quantumMaterials,
     coin: new T.MeshStandardMaterial({
       color: colors.coin,
       roughness: 0.2,
@@ -921,6 +1038,62 @@ function makeGlowMaterial(T, color, intensity = 1) {
     roughness: 0.24,
     metalness: 0.58,
   });
+}
+
+function createCodeGlyphMaterials(T, colors) {
+  const glyphs = ['01', '10', '{}', '<>', 'if', 'fn', '=>', '[]'];
+  const palette = [
+    colors.codePrimary ?? colors.glass ?? colors.rail,
+    colors.codeSecondary ?? colors.marker ?? colors.center,
+    colors.center ?? colors.rail,
+  ];
+
+  return glyphs.map((glyph, index) => {
+    const color = palette[index % palette.length];
+    const material = new T.SpriteMaterial({
+      map: createCodeGlyphTexture(T, glyph, color),
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.54,
+      depthWrite: false,
+      depthTest: true,
+      blending: T.AdditiveBlending,
+    });
+    return material;
+  });
+}
+
+function createCodeGlyphTexture(T, glyph, color) {
+  if (typeof document === 'undefined') return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  const cssColor = new T.Color(color).getStyle();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.shadowColor = cssColor;
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = cssColor;
+  ctx.font = '700 28px Consolas, Monaco, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(glyph, 64, 34);
+
+  const texture = new T.CanvasTexture(canvas);
+  texture.colorSpace = T.SRGBColorSpace;
+  return texture;
+}
+
+function disposeMaterialLike(material) {
+  if (!material) return;
+  if (Array.isArray(material)) {
+    material.forEach(disposeMaterialLike);
+    return;
+  }
+  material.map?.dispose?.();
+  material.dispose?.();
 }
 
 function closestByRaycast(T, pos, roadMeshes) {
